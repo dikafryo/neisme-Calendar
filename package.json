@@ -1,6 +1,6 @@
 {
   "name": "neisme-calendar",
-  "version": "26.5.29",
+  "version": "26.5.28df3",
   "description": "neisme Calendar - 바탕화면 반투명 캘린더 위젯 (Google Calendar / Tasks 연동)",
   "main": "main.js",
   "author": "디카프료 (neis.me)",
@@ -29,7 +29,7 @@
   "build": {
     "appId": "me.neis.calendar",
     "publish": null,
-    "productName": "neisme Calendar",
+    "productName": "디지털미래교육과 캘린더",
     "artifactName": "${productName} Setup ${version}.${ext}",
     "files": [
       "main.js",
@@ -41,7 +41,9 @@
       "google-config.json"
     ],
     "win": {
-      "target": ["nsis"],
+      "target": [
+        "nsis"
+      ],
       "icon": "assets/icon.ico",
       "signtoolOptions": null
     },
@@ -50,17 +52,21 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "neisme Calendar"
+      "shortcutName": "디지털미래교육과 캘린더"
     },
     "mac": {
       "target": [
         {
           "target": "dmg",
-          "arch": ["universal"]
+          "arch": [
+            "universal"
+          ]
         },
         {
           "target": "zip",
-          "arch": ["universal"]
+          "arch": [
+            "universal"
+          ]
         }
       ],
       "icon": "assets/icon.icns",
@@ -72,11 +78,19 @@
       "notarize": false
     },
     "dmg": {
-      "title": "neisme Calendar ${version}",
+      "title": "디지털미래교육과 캘린더 ${version}",
       "icon": "assets/icon.icns",
       "contents": [
-        { "x": 130, "y": 220 },
-        { "x": 410, "y": 220, "type": "link", "path": "/Applications" }
+        {
+          "x": 130,
+          "y": 220
+        },
+        {
+          "x": 410,
+          "y": 220,
+          "type": "link",
+          "path": "/Applications"
+        }
       ],
       "window": {
         "width": 540,

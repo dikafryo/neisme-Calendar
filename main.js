@@ -1,4 +1,4 @@
-// main.js — Electron 메인 프로세스 (neisme Calendar v1)
+// main.js ??Electron 硫붿씤 ?꾨줈?몄뒪 (neisme Calendar v1)
 
 const { app, BrowserWindow, Tray, Menu, ipcMain, screen, nativeImage, shell, Notification, globalShortcut } = require('electron');
 const path = require('path');
@@ -11,7 +11,7 @@ const store = new Store({
   defaults: {
     bounds: null,
     locked: true,
-    alwaysOnTop: true,    // 기본 ON (다른 창 위에 표시)
+    alwaysOnTop: true,    // 湲곕낯 ON (?ㅻⅨ 李??꾩뿉 ?쒖떆)
     autoStart: true,
     layout: 'split',
     opacity: 0.88,
@@ -22,18 +22,18 @@ const store = new Store({
 let mainWindow = null;
 let tray = null;
 let isQuitting = false;
-// 모듈 레벨 함수: createTray에서 정의되고 createWindow의 show/hide 핸들러에서 호출됨
+// 紐⑤뱢 ?덈꺼 ?⑥닔: createTray?먯꽌 ?뺤쓽?섍퀬 createWindow??show/hide ?몃뱾?ъ뿉???몄텧??
 let refreshTrayMenu = () => {};
 
-// ─────────────────────────────────────────────
-// 🟢 수정 ① 자동실행 등록 헬퍼 (패키징된 앱에서만 동작)
-// ─────────────────────────────────────────────
-// dev 모드(npm start)에서 setLoginItemSettings를 호출하면
-// process.execPath가 node_modules\electron\dist\electron.exe를 가리켜서
-// 부팅 시 Electron 기본 환영화면이 뜨게 됨. 따라서 패키징 상태에서만 등록.
+// ?????????????????????????????????????????????
+// ?윟 ?섏젙 ???먮룞?ㅽ뻾 ?깅줉 ?ы띁 (?⑦궎吏뺣맂 ?깆뿉?쒕쭔 ?숈옉)
+// ?????????????????????????????????????????????
+// dev 紐⑤뱶(npm start)?먯꽌 setLoginItemSettings瑜??몄텧?섎㈃
+// process.execPath媛 node_modules\electron\dist\electron.exe瑜?媛由ъ폒??
+// 遺????Electron 湲곕낯 ?섏쁺?붾㈃???④쾶 ?? ?곕씪???⑦궎吏??곹깭?먯꽌留??깅줉.
 function setAutoStart(enabled) {
   if (!app.isPackaged) {
-    console.log('[autoStart] dev 모드 — 자동실행 등록 건너뜀');
+    console.log('[autoStart] dev 紐⑤뱶 ???먮룞?ㅽ뻾 ?깅줉 嫄대꼫?');
     return;
   }
   app.setLoginItemSettings({
@@ -42,9 +42,9 @@ function setAutoStart(enabled) {
   });
 }
 
-// ─────────────────────────────────────────────
-// 창 생성
-// ─────────────────────────────────────────────
+// ?????????????????????????????????????????????
+// 李??앹꽦
+// ?????????????????????????????????????????????
 function getDefaultBounds() {
   const display = screen.getPrimaryDisplay();
   const { width, height } = display.workAreaSize;
@@ -72,7 +72,7 @@ function createWindow() {
     resizable: !locked,
     movable: !locked,
     skipTaskbar: true,
-    alwaysOnTop: false,    // ready-to-show에서 store 값에 따라 적용
+    alwaysOnTop: false,    // ready-to-show?먯꽌 store 媛믪뿉 ?곕씪 ?곸슜
     hasShadow: false,
     show: false,
     icon: path.join(__dirname, 'assets', 'icon.ico'),
@@ -86,8 +86,8 @@ function createWindow() {
 
   mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
 
-  // 🟢 수정 ② --hidden 인자로 시작되면 show를 건너뜀
-  // (기존엔 ready-to-show에서 무조건 show()해서 --hidden이 무시됐음)
+  // ?윟 ?섏젙 ??--hidden ?몄옄濡??쒖옉?섎㈃ show瑜?嫄대꼫?
+  // (湲곗〈??ready-to-show?먯꽌 臾댁“嫄?show()?댁꽌 --hidden??臾댁떆?먯쓬)
   mainWindow.once('ready-to-show', () => {
     if (!process.argv.includes('--hidden')) {
       mainWindow.show();
@@ -98,7 +98,7 @@ function createWindow() {
   mainWindow.on('moved', saveBounds);
   mainWindow.on('resized', saveBounds);
 
-  // 가시성 변경 시 트레이 메뉴 라벨 즉시 갱신
+  // 媛?쒖꽦 蹂寃????몃젅??硫붾돱 ?쇰꺼 利됱떆 媛깆떊
   mainWindow.on('show', () => refreshTrayMenu());
   mainWindow.on('hide', () => {
     refreshTrayMenu();
@@ -107,7 +107,7 @@ function createWindow() {
     }
   });
 
-  // 닫기 → 트레이로 숨김
+  // ?リ린 ???몃젅?대줈 ?④?
   mainWindow.on('close', (e) => {
     if (!isQuitting) {
       e.preventDefault();
@@ -116,7 +116,7 @@ function createWindow() {
   });
 
   if (process.argv.includes('--dev')) {
-    // 🆕 F12 / Ctrl+Shift+I — 창에 포커스 있을 때만 동작
+    // ?넅 F12 / Ctrl+Shift+I ??李쎌뿉 ?ъ빱???덉쓣 ?뚮쭔 ?숈옉
     mainWindow.webContents.on('before-input-event', (event, input) => {
       if (input.type !== 'keyDown') return;
       const isF12 = input.key === 'F12';
@@ -137,15 +137,15 @@ function saveBounds() {
   }
 }
 
-// ─────────────────────────────────────────────
-// 항상 위에 표시
-// ─────────────────────────────────────────────
+// ?????????????????????????????????????????????
+// ??긽 ?꾩뿉 ?쒖떆
+// ?????????????????????????????????????????????
 function applyAlwaysOnTop(enabled) {
   if (!mainWindow || mainWindow.isDestroyed()) return;
   try {
     mainWindow.setAlwaysOnTop(!!enabled, 'normal');
     mainWindow.setVisibleOnAllWorkspaces(true);
-    // 렌더러 동기화: 설정 패널 체크박스가 어디서 변경되든 즉시 반영
+    // ?뚮뜑???숆린?? ?ㅼ젙 ?⑤꼸 泥댄겕諛뺤뒪媛 ?대뵒??蹂寃쎈릺??利됱떆 諛섏쁺
     mainWindow.webContents.send('always-on-top-changed', !!enabled);
     console.log('[alwaysOnTop]', enabled);
   } catch (err) {
@@ -153,9 +153,9 @@ function applyAlwaysOnTop(enabled) {
   }
 }
 
-// ─────────────────────────────────────────────
-// 잠금 모드
-// ─────────────────────────────────────────────
+// ?????????????????????????????????????????????
+// ?좉툑 紐⑤뱶
+// ?????????????????????????????????????????????
 function applyLockState(locked, notifyRenderer = true) {
   if (!mainWindow) return;
   store.set('locked', locked);
@@ -166,13 +166,13 @@ function applyLockState(locked, notifyRenderer = true) {
   }
 }
 
-// ─────────────────────────────────────────────
-// 시스템 트레이
-// ─────────────────────────────────────────────
+// ?????????????????????????????????????????????
+// ?쒖뒪???몃젅??
+// ?????????????????????????????????????????????
 function createTray() {
   let iconPath;
   if (process.platform === 'darwin') {
-    // macOS: Template Image (검정 단색, OS가 색 자동 처리)
+    // macOS: Template Image (寃???⑥깋, OS媛 ???먮룞 泥섎━)
     iconPath = path.join(__dirname, 'assets', 'iconTemplate.png');
   } else if (process.platform === 'win32') {
     iconPath = path.join(__dirname, 'assets', 'icon.ico');
@@ -195,9 +195,9 @@ function createTray() {
   }
 
   tray = new Tray(trayIcon);
-  tray.setToolTip('neisme Calendar');
+  tray.setToolTip('디지털미래교육과 캘린더');
 
-  // 메뉴 갱신 함수: 모듈 레벨 변수에 할당
+  // 硫붾돱 媛깆떊 ?⑥닔: 紐⑤뱢 ?덈꺼 蹂?섏뿉 ?좊떦
   refreshTrayMenu = () => {
     const visible = mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible();
     const locked = store.get('locked');
@@ -205,12 +205,17 @@ function createTray() {
 
     const menu = Menu.buildFromTemplate([
       {
+        label: '디지털미래교육과 캘린더',
+        click: () => shell.openExternal('https://cal.sw4u.kr/?digital_future')
+      },
+      { type: 'separator' },
+      {
         label: visible ? '캘린더 숨기기' : '캘린더 보이기',
         click: () => toggleWindow()
       },
       { type: 'separator' },
       {
-        label: locked ? '🔒 잠금 해제' : '🔓 잠그기',
+        label: locked ? '창 잠금 해제' : '창 잠그기',
         click: () => applyLockState(!locked)
       },
       {
@@ -239,7 +244,7 @@ function createTray() {
         }
       },
       { type: 'separator' },
-      // 🟢 수정 ③ 트레이 자동실행 체크박스 → setAutoStart() 사용
+      // ?윟 ?섏젙 ???몃젅???먮룞?ㅽ뻾 泥댄겕諛뺤뒪 ??setAutoStart() ?ъ슜
       {
         label: 'Windows 시작 시 자동 실행',
         type: 'checkbox',
@@ -264,10 +269,10 @@ function createTray() {
   refreshTrayMenu();
   tray.on('double-click', () => toggleWindow());
   tray.on('click', () => toggleWindow());
-  // 우클릭 시점에도 한 번 더 갱신 (안전장치)
+  // ?고겢由??쒖젏?먮룄 ??踰???媛깆떊 (?덉쟾?μ튂)
   tray.on('right-click', () => refreshTrayMenu());
 
-  // store 변경 → 메뉴 즉시 갱신
+  // store 蹂寃???硫붾돱 利됱떆 媛깆떊
   store.onDidChange('locked', refreshTrayMenu);
   store.onDidChange('alwaysOnTop', refreshTrayMenu);
 }
@@ -282,9 +287,9 @@ function toggleWindow() {
   }
 }
 
-// ─────────────────────────────────────────────
+// ?????????????????????????????????????????????
 // IPC
-// ─────────────────────────────────────────────
+// ?????????????????????????????????????????????
 function setupIPC() {
   ipcMain.handle('set-lock', (e, locked) => {
     applyLockState(locked, false);
@@ -292,24 +297,24 @@ function setupIPC() {
   });
   ipcMain.handle('get-lock', () => store.get('locked'));
 
-  // 🔧 v26.5.8a-fix1: 모달 열기 직전 OS-level focus 강제
-  // alwaysOnTop 위젯은 click을 받아도 native focus가 안 들어와서
-  // element.focus()만으로는 키보드 입력이 안 되는 케이스가 있음.
+  // ?뵩 v26.5.8a-fix1: 紐⑤떖 ?닿린 吏곸쟾 OS-level focus 媛뺤젣
+  // alwaysOnTop ?꾩젽? click??諛쏆븘??native focus媛 ???ㅼ뼱???
+  // element.focus()留뚯쑝濡쒕뒗 ?ㅻ낫???낅젰?????섎뒗 耳?댁뒪媛 ?덉쓬.
   ipcMain.handle('focus-window', () => {
     if (!mainWindow || mainWindow.isDestroyed()) return;
     if (mainWindow.isMinimized()) mainWindow.restore();
-    mainWindow.focus();              // native window에 OS focus
-    mainWindow.webContents.focus();  // 그 안의 webContents에 focus
+    mainWindow.focus();              // native window??OS focus
+    mainWindow.webContents.focus();  // 洹??덉쓽 webContents??focus
   });
 
-  // 🆕 v26.5.8e alwaysOnTop 위젯 모달 키보드 입력 우회 (a-fix1 후속)
-  //   증상: alwaysOnTop=true 인 topmost 윈도우는 클릭해도 OS-level focus 가
-  //         다른 앱(이전 활성 앱)에 머물러 키보드 입력이 우리 앱으로 안 들어옴.
-  //         (a-fix1의 focus-window 만으로는 해결 안 됨 — alwaysOnTop 자체를 잠시
-  //          내려놔야 OS 가 우리 윈도우를 정상적인 active window 로 인식)
-  //   - suspend=true  : alwaysOnTop OFF (store 안 건드림) + restore + focus 강제
-  //   - suspend=false : store 값으로 복원 (사용자가 OFF 로 설정 중이면 OFF 유지)
-  //   사용 위치: app.js openEventModal/closeEventModal 진입·이탈
+  // ?넅 v26.5.8e alwaysOnTop ?꾩젽 紐⑤떖 ?ㅻ낫???낅젰 ?고쉶 (a-fix1 ?꾩냽)
+  //   利앹긽: alwaysOnTop=true ??topmost ?덈룄?곕뒗 ?대┃?대룄 OS-level focus 媛
+  //         ?ㅻⅨ ???댁쟾 ?쒖꽦 ????癒몃Ъ???ㅻ낫???낅젰???곕━ ?깆쑝濡????ㅼ뼱??
+  //         (a-fix1??focus-window 留뚯쑝濡쒕뒗 ?닿껐 ??????alwaysOnTop ?먯껜瑜??좎떆
+  //          ?대젮?붿빞 OS 媛 ?곕━ ?덈룄?곕? ?뺤긽?곸씤 active window 濡??몄떇)
+  //   - suspend=true  : alwaysOnTop OFF (store ??嫄대뱶由? + restore + focus 媛뺤젣
+  //   - suspend=false : store 媛믪쑝濡?蹂듭썝 (?ъ슜?먭? OFF 濡??ㅼ젙 以묒씠硫?OFF ?좎?)
+  //   ?ъ슜 ?꾩튂: app.js openEventModal/closeEventModal 吏꾩엯쨌?댄깉
   ipcMain.handle('modal-aot-bypass', (e, suspend) => {
     if (!mainWindow || mainWindow.isDestroyed()) return;
     if (suspend) {
@@ -318,8 +323,8 @@ function setupIPC() {
       mainWindow.focus();
       mainWindow.webContents.focus();
     } else {
-      // store 값 그대로 복원 — applyAlwaysOnTop 이 always-on-top-changed 이벤트도
-      // renderer 로 보내주므로 설정 패널 체크박스 상태도 자연 동기화됨.
+      // store 媛?洹몃?濡?蹂듭썝 ??applyAlwaysOnTop ??always-on-top-changed ?대깽?몃룄
+      // renderer 濡?蹂대궡二쇰?濡??ㅼ젙 ?⑤꼸 泥댄겕諛뺤뒪 ?곹깭???먯뿰 ?숆린?붾맖.
       applyAlwaysOnTop(store.get('alwaysOnTop'));
     }
   });
@@ -357,7 +362,7 @@ function setupIPC() {
   ipcMain.handle('get-app-version', () => app.getVersion());
   ipcMain.handle('open-external', (e, url) => shell.openExternal(url));
 
-  // ── Google 인증 ─────────────────────────────
+  // ?? Google ?몄쬆 ?????????????????????????????
   ipcMain.handle('auth-google', async () => {
     try {
       const result = await googleAuth.authenticate();
@@ -380,7 +385,7 @@ function setupIPC() {
     return { ok: true };
   });
 
-  // ── Google Calendar ──────────────────────────
+  // ?? Google Calendar ??????????????????????????
   ipcMain.handle('sync-google-calendar', async () => {
     try {
       const r = await require('./sync/google-calendar').incrementalSync();
@@ -409,7 +414,7 @@ function setupIPC() {
     }
   });
 
-  // ── Google Tasks ─────────────────────────────
+  // ?? Google Tasks ?????????????????????????????
   ipcMain.handle('sync-google-tasks', async () => {
     try {
       const r = await require('./sync/google-tasks').incrementalSync();
@@ -438,7 +443,7 @@ function setupIPC() {
     }
   });
 
-  // ── NextCloud 인증 ─────────────────────────
+  // ?? NextCloud ?몄쬆 ?????????????????????????
   ipcMain.handle('auth-nextcloud', async (e, config) => {
     try {
       const result = await nextcloudAuth.authenticate(config);
@@ -463,7 +468,7 @@ function setupIPC() {
     }
   });
 
-  // ── NextCloud Calendar ──────────────────────
+  // ?? NextCloud Calendar ??????????????????????
   ipcMain.handle('sync-nextcloud', async () => {
     try {
       const r = await require('./sync/nextcloud-calendar').incrementalSync();
@@ -475,7 +480,7 @@ function setupIPC() {
   });
   ipcMain.handle('push-nextcloud-event', async (e, event, options) => {
     try {
-      // 🆕 v26.5.8b options.detachedInstances 지원 (분리 인스턴스 묶음 push)
+      // ?넅 v26.5.8b options.detachedInstances 吏??(遺꾨━ ?몄뒪?댁뒪 臾띠쓬 push)
       const result = await require('./sync/nextcloud-calendar').pushEvent(event, options);
       return { ok: true, event: result };
     } catch (err) {
@@ -493,7 +498,7 @@ function setupIPC() {
     }
   });
 
-  // ── Google 다중 캘린더 (🆕) ─────────────────
+  // ?? Google ?ㅼ쨷 罹섎┛??(?넅) ?????????????????
   ipcMain.handle('google-list-calendars', async () => {
     try {
       const cals = await googleAuth.listCalendars();
@@ -505,12 +510,12 @@ function setupIPC() {
   ipcMain.handle('google-get-selected-calendars', () => googleAuth.getSelectedCalendars());
   ipcMain.handle('google-set-selected-calendars', (e, list) => {
     googleAuth.setSelectedCalendars(list);
-    // 캘린더 선택이 바뀌면 syncToken들을 초기화 (다시 fullSync 하도록)
+    // 罹섎┛???좏깮??諛붾뚮㈃ syncToken?ㅼ쓣 珥덇린??(?ㅼ떆 fullSync ?섎룄濡?
     try { require('./sync/google-calendar').clearSyncState(); } catch {}
     return { ok: true };
   });
 
-  // ── NextCloud 다중 캘린더 (🆕) ───────────────
+  // ?? NextCloud ?ㅼ쨷 罹섎┛??(?넅) ???????????????
   ipcMain.handle('nextcloud-get-selected-calendars', () => {
     return require('./sync/nextcloud-auth').getSelectedCalendars();
   });
@@ -520,7 +525,7 @@ function setupIPC() {
     return { ok: true };
   });
 
-  // ── 🆕 임의 범위 동기화 (구글/NextCloud 캘린더 이동 시 자동 호출) ────
+  // ?? ?넅 ?꾩쓽 踰붿쐞 ?숆린??(援ш?/NextCloud 罹섎┛???대룞 ???먮룞 ?몄텧) ????
   ipcMain.handle('fetch-google-range', async (e, { startISO, endISO }) => {
     try {
       const r = await require('./sync/google-calendar').fetchRange(startISO, endISO);
@@ -541,9 +546,9 @@ function setupIPC() {
   });
 }
 
-// ─────────────────────────────────────────────
-// 단일 인스턴스
-// ─────────────────────────────────────────────
+// ?????????????????????????????????????????????
+// ?⑥씪 ?몄뒪?댁뒪
+// ?????????????????????????????????????????????
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
   app.quit();
@@ -556,9 +561,9 @@ if (!gotLock) {
   });
 }
 
-// 🟢 수정 ④ whenReady 정리
-//  - setAutoStart() 헬퍼 사용 (dev 모드에서는 등록 안 함)
-//  - 별도 mainWindow.hide() 블록 제거 (--hidden 처리는 ready-to-show에서)
+// ?윟 ?섏젙 ??whenReady ?뺣━
+//  - setAutoStart() ?ы띁 ?ъ슜 (dev 紐⑤뱶?먯꽌???깅줉 ????
+//  - 蹂꾨룄 mainWindow.hide() 釉붾줉 ?쒓굅 (--hidden 泥섎━??ready-to-show?먯꽌)
 app.whenReady().then(() => {
   setAutoStart(store.get('autoStart'));
 
@@ -566,7 +571,7 @@ app.whenReady().then(() => {
   createWindow();
   createTray();
 
-  // 🆕 F12 / Ctrl+Shift+I 로 개발자 도구 열기
+  // ?넅 F12 / Ctrl+Shift+I 濡?媛쒕컻???꾧뎄 ?닿린
   globalShortcut.register('F12', () => {
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.toggleDevTools();
@@ -583,7 +588,7 @@ app.whenReady().then(() => {
   });
 });
 
-// 🆕 앱 종료 시 단축키 해제
+// ?넅 ??醫낅즺 ???⑥텞???댁젣
 app.on('will-quit', () => {
   globalShortcut.unregisterAll();
 });

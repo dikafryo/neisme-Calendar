@@ -1,6 +1,10 @@
 {
   "name": "neisme-calendar",
+<<<<<<< HEAD
   "version": "26.5.28df4",
+=======
+  "version": "26.5.28.df4",
+>>>>>>> c8b85a7 (v26.5.28.df4 디지털미래 링크/브랜드 클릭 및 버전 반영)
   "description": "neisme Calendar - 바탕화면 반투명 캘린더 위젯 (Google Calendar / Tasks 연동)",
   "main": "main.js",
   "author": "디카프료 (neis.me)",

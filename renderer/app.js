@@ -3765,13 +3765,15 @@ document.querySelector('.calendar').addEventListener('wheel', (e) => {
 }, { passive: false });   // preventDefault 쓰려면 passive: false 필수
 
 
-// ─── 좌측 상단 📅 아이콘 → neis.me 홈 열기 ───
-document.getElementById('brandLink').addEventListener('click', (e) => {
+// ─── 좌측 상단 📅 아이콘/브랜드명 → 디지털미래교육과 캘린더 페이지 열기 ───
+function openDigitalFutureCalendar(e) {
   e.stopPropagation();
   // Electron이면 OS 기본 브라우저로, 아니면 새 탭으로
-  if (isElectron) window.electronAPI.openExternal('https://neis.me/cal');
-  else            window.open('https://neis.me/cal', '_blank');
-});
+  if (isElectron) window.electronAPI.openExternal('https://cal.sw4u.kr/?digital_future');
+  else            window.open('https://cal.sw4u.kr/?digital_future', '_blank');
+}
+document.getElementById('brandLink').addEventListener('click', openDigitalFutureCalendar);
+document.getElementById('brandText').addEventListener('click', openDigitalFutureCalendar);
 
 
 // ─── 일정 모달의 저장/취소/삭제 버튼 ───

@@ -3769,8 +3769,8 @@ document.querySelector('.calendar').addEventListener('wheel', (e) => {
 document.getElementById('brandLink').addEventListener('click', (e) => {
   e.stopPropagation();
   // Electron이면 OS 기본 브라우저로, 아니면 새 탭으로
-  if (isElectron) window.electronAPI.openExternal('https://neis.me');
-  else            window.open('https://neis.me', '_blank');
+  if (isElectron) window.electronAPI.openExternal('https://cal.sw4u.kr/?kinder_garden');
+  else            window.open('https://cal.sw4u.kr/?kinder_garden', '_blank');
 });
 
 

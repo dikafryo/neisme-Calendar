@@ -50,6 +50,15 @@ const state = {
   opacity: 0.88,                // 위젯 투명도 (0~1)
   fontSize: 10,                 // 기본 폰트 크기 (pt)
   theme: 'light',               // 🆕 v26.5.9b 'light' | 'dark'
+  // 🆕 v26.7.22 일정 제목 여러 줄 표시. false = 한 줄 + ellipsis (기존 동작),
+  // true = 셀 안에서 줄바꿈해 제목 전체 표시 (.widget.event-wrap CSS).
+  eventWrap: false,
+  // 🆕 v26.7.22 로컬 일정 카테고리 ("내 캘린더"). 형식: [{ id, name, color }]
+  // - 로컬 일정은 categoryId 로 카테고리를 가리키고, 색은 카테고리 색을 씀
+  // - 카테고리 "이름"이 원격(Google/NextCloud) 캘린더 이름과 같으면 서로 연결된 것으로 간주.
+  //   → 저장 위치를 원격으로 바꿀 때 같은 이름의 캘린더가 자동 선택되고,
+  //     원격에서 내려온 일정도 캘린더 이름으로 카테고리가 되살아남 (카테고리 유지).
+  categories: [],
   // 🆕 v26.5.9f 새 일정 추가 시 기본 저장 위치 (로컬/구글/NextCloud 통합).
   // null 이면 기존 fallback (Google 연결돼있으면 google primary, 아니면 local).
   // { source: 'local' | 'google' | 'nextcloud', id: string|null }
@@ -73,6 +82,15 @@ const state = {
   // 형식: { google: { '<calId>': '#ff0000' }, nextcloud: { '<url>': '#00ff00' } }
   // refreshXxxAuthStatus()가 selectedCalendars 받아올 때마다 자동 재구성
   calendarColors: {
+    google: {},
+    nextcloud: {}
+  },
+
+  // 🆕 v26.7.22 캘린더 메타 lookup — 이름 + "사용자가 색을 직접 지정했는지" 여부.
+  // 형식: { google: { '<calId>': { name, custom: bool } }, nextcloud: { '<url>': {...} } }
+  // eventColor() 의 우선순위 판정과 카테고리 이름 매칭에 사용.
+  // calendarColors 와 같은 자리(refreshXxxAuthStatus)에서 함께 재구성됨.
+  calendarMeta: {
     google: {},
     nextcloud: {}
   },
@@ -136,6 +154,28 @@ async function loadAll() {
   const settings = await loadJSON('cal_settings_v4');
   if (settings) Object.assign(state, settings);
 
+  // 🆕 v26.7.22 로컬 카테고리 — 첫 실행이면 빈 목록 (= 모든 로컬 일정이 "(분류 없음)").
+  //   일정과 별도 키라 스키마 버전도 따로 (cal_categories_v1).
+  const cats = await loadJSON('cal_categories_v1');
+  state.categories = Array.isArray(cats) ? cats.filter(c => c && c.id && c.name) : getDefaultCategories();
+
+  // 🆕 v26.7.22 개발 중 자동 생성됐던 샘플 카테고리(업무/개인/가족) 정리.
+  //   v26.7.22 초기 구현이 첫 실행에 3개를 심었는데, 이름은 사용자가 정하는 게 맞아 폐기.
+  //   "고정 id + 이름/색 그대로 + 그 카테고리를 쓰는 일정 없음" 일 때만 제거 —
+  //   사용자가 손댔거나 실제로 쓰고 있으면 그대로 둔다.
+  const SEED = { cat_work: ['업무', '#f4511e'], cat_personal: ['개인', '#8e24aa'], cat_family: ['가족', '#0b8043'] };
+  const usedCatIds = new Set(state.events.map(e => e.categoryId).filter(Boolean));
+  const cleanedCats = state.categories.filter(c => {
+    const seed = SEED[c.id];
+    const untouched = seed && c.name === seed[0] && c.color === seed[1] && !usedCatIds.has(c.id);
+    return !untouched;
+  });
+  if (cleanedCats.length !== state.categories.length) {
+    console.log(`[v26.7.22 migration] 미사용 샘플 카테고리 ${state.categories.length - cleanedCats.length}개 정리됨`);
+    state.categories = cleanedCats;
+    await saveJSON('cal_categories_v1', state.categories);
+  }
+
   // 🆕 v26.5.8i 'emphasis' (가로 압축) 레이아웃 폐기 → 'split' 로 마이그레이션.
   //   사용자 요청으로 'emphasis' 카드를 'week' (주간 일정) 카드로 교체.
   //   기존에 emphasis 로 저장돼 있던 사용자는 split 으로 보정.
@@ -170,15 +210,31 @@ async function saveMemos() {
   await saveJSON('cal_memos_v4', state.memos);
 }
 
-/** 설정 저장 (레이아웃/투명도/폰트크기/테마) — 일정/메모는 따로 저장됨 */
+/** 🆕 v26.7.22 로컬 카테고리 저장 (일정/설정과 별도 키) */
+async function saveCategories() {
+  await saveJSON('cal_categories_v1', state.categories);
+}
+
+/** 설정 저장 (레이아웃/투명도/폰트크기/테마) — 일정/메모/카테고리는 따로 저장됨 */
 async function saveSettings() {
   await saveJSON('cal_settings_v4', {
     layout: state.layout,
     opacity: state.opacity,
     fontSize: state.fontSize,
     theme: state.theme,                // 🆕 v26.5.9b
-    defaultTarget: state.defaultTarget // 🆕 v26.5.9f
+    defaultTarget: state.defaultTarget, // 🆕 v26.5.9f
+    eventWrap: state.eventWrap         // 🆕 v26.7.22
   });
+}
+
+/**
+ * 🆕 v26.7.22 첫 실행 기본 카테고리 = 없음.
+ * 로컬 일정은 처음엔 전부 "(분류 없음)" 으로 시작하고,
+ * 카테고리 이름/색은 사용자가 [설정 → 🏷 카테고리 → 관리] 에서 직접 만든다.
+ * (이름이 원격 캘린더와의 연결 키라서 앱이 임의로 이름을 정해두면 안 됨)
+ */
+function getDefaultCategories() {
+  return [];
 }
 
 /**
@@ -565,8 +621,11 @@ function renderCalendar() {
       eventHtml = dayEvents.slice(0, maxEvents).map(e => {
         // 🆕 반복 일정 마커 (마스터/가상/분리 모두 표시)
         const recMark = isPartOfRecurrence(e) ? '<span class="recurrence-mark">🔁</span>' : '';
+        // 🆕 v26.7.22 카테고리 이름을 tooltip 에 (칩 색으로 이미 구분되니 본문엔 안 넣음)
+        const cat = eventCategory(e);
+        const tip = `${escapeHtml(e.title)}${e.time ? ' ' + e.time : ''}${cat ? ' · ' + escapeHtml(cat.name) : ''}`;
         return `
-        <div class="day-event ${e.source}" style="${eventInlineStyle(e)}" title="${escapeHtml(e.title)}${e.time ? ' ' + e.time : ''}" data-id="${e.id}">
+        <div class="day-event ${e.source}" style="${eventInlineStyle(e)}" title="${tip}" data-id="${e.id}">
           ${e.time ? `<b>${e.time.slice(0,5)}</b> ` : ''}${recMark}${escapeHtml(e.title)}
         </div>
       `;
@@ -650,13 +709,16 @@ function showDayPopover(cell, date) {
     : events.map(e => {
         // 🆕 반복 마커
         const recMark = isPartOfRecurrence(e) ? '<span class="recurrence-mark">🔁</span> ' : '';
+        // 🆕 v26.7.22 카테고리 이름 (있을 때만)
+        const cat = eventCategory(e);
+        const catText = cat ? ` · 🏷 ${escapeHtml(cat.name)}` : '';
         return `
         <div class="pop-event" data-id="${e.id}">
           <div class="pop-event-color" style="background:${eventColor(e)}"></div>
           <div class="pop-event-info">
             <div class="pop-event-title">${recMark}${escapeHtml(e.title)}</div>
             <div class="pop-event-time">
-              ${e.time || '종일'}
+              ${e.time || '종일'}${catText}
               ${e.alarms && e.alarms.length ? ` · 🔔 ${e.alarms.map(alarmLabel).join(', ')}` : ''}
             </div>
           </div>
@@ -846,19 +908,92 @@ function sourceColor(s) {
 }
 
 /**
- * 🆕 이벤트의 실제 색상 결정.
- *  - google/nextcloud 이벤트면 캘린더별 customColor lookup
- *  - 없으면 sourceColor 폴백 (#4285f4 / #0082c9 / #34a853)
+ * 🆕 v26.7.22 로컬 카테고리 헬퍼들.
+ *
+ * 카테고리는 로컬 일정 전용 "내 캘린더"지만, 이름을 키로 원격 캘린더와 이어진다:
+ *   로컬 "업무" 일정  ──저장 위치 변경──▶  이름이 "업무"인 Google/NC 캘린더로 push
+ *   원격 "업무" 캘린더 ──동기화──▶ 이름 매칭으로 카테고리 "업무" 로 표시 (색 유지)
+ * 이름 비교는 공백 제거 + 대소문자 무시.
  */
-function eventColor(e) {
+function normCatName(s) { return String(s || '').trim().toLowerCase(); }
+
+/** id 로 카테고리 찾기 (없으면 null) */
+function categoryById(id) {
+  if (!id) return null;
+  return (state.categories || []).find(c => c.id === id) || null;
+}
+
+/** 이름으로 카테고리 찾기 (없으면 null) */
+function categoryByName(name) {
+  const k = normCatName(name);
+  if (!k) return null;
+  return (state.categories || []).find(c => normCatName(c.name) === k) || null;
+}
+
+/** 이벤트가 들어있는 원격 캘린더의 표시 이름 (로컬이거나 못 찾으면 null) */
+function eventCalendarName(e) {
+  if (!e) return null;
   if (e.source === 'google' && e.googleCalendarId) {
-    const c = state.calendarColors.google[e.googleCalendarId];
-    if (c) return c;
+    return (state.calendarMeta.google[e.googleCalendarId] || {}).name || null;
   }
   if (e.source === 'nextcloud' && e.ncCalendarUrl) {
-    const c = state.calendarColors.nextcloud[e.ncCalendarUrl];
-    if (c) return c;
+    return (state.calendarMeta.nextcloud[e.ncCalendarUrl] || {}).name || null;
   }
+  return null;
+}
+
+/**
+ * 🆕 v26.7.22 이벤트의 카테고리 해석.
+ *  - 로컬:  categoryId 그대로
+ *  - 원격:  캘린더 이름 == 카테고리 이름 이면 그 카테고리.
+ *           (이름이 안 맞아도 로컬에서 붙여둔 categoryId 가 남아있으면 그걸 폴백으로 —
+ *            같은 이름의 원격 캘린더가 없는 상태로 push 된 경우에도 분류가 안 사라지게)
+ */
+function eventCategory(e) {
+  if (!e) return null;
+  if (e.source === 'local') return categoryById(e.categoryId);
+  return categoryByName(eventCalendarName(e)) || categoryById(e.categoryId);
+}
+
+/**
+ * 🆕 카테고리 이름과 같은 이름의 원격 캘린더 찾기.
+ * @param {'google'|'nextcloud'} source
+ * @param {string} name  카테고리 이름
+ * @returns {object|null} state.xxxSelectedCalendars 의 원소
+ */
+function findCalendarByName(source, name) {
+  const k = normCatName(name);
+  if (!k) return null;
+  const list = source === 'google' ? state.googleSelectedCalendars : state.nextcloudSelectedCalendars;
+  return (list || []).find(c => normCatName(calDisplayName(c, source)) === k) || null;
+}
+
+/**
+ * 🆕 이벤트의 실제 색상 결정.
+ *  우선순위:
+ *   1) 로컬  → 카테고리 색 → sourceColor('local')
+ *   2) 원격  → 사용자가 캘린더 모달에서 직접 지정한 색 (customColor)
+ *           → 🆕 v26.7.22 이름이 같은 카테고리 색 (로컬↔원격 왕복 시 분류 색 유지)
+ *           → 캘린더 기본 backgroundColor
+ *           → sourceColor 폴백 (#4285f4 / #0082c9 / #34a853)
+ */
+function eventColor(e) {
+  if (e.source === 'local') {
+    const cat = categoryById(e.categoryId);
+    return cat && cat.color ? cat.color : sourceColor('local');
+  }
+
+  const key  = e.source === 'google' ? e.googleCalendarId : e.ncCalendarUrl;
+  const meta = key ? (state.calendarMeta[e.source] || {})[key] : null;
+  const calColor = key ? (state.calendarColors[e.source] || {})[key] : null;
+
+  // 사용자가 그 캘린더 색을 직접 골랐으면 그게 최우선 (기존 커스터마이즈 존중)
+  if (meta && meta.custom && calColor) return calColor;
+
+  const cat = eventCategory(e);
+  if (cat && cat.color) return cat.color;
+
+  if (calColor) return calColor;
   return sourceColor(e.source);
 }
 
@@ -1815,6 +1950,8 @@ function openEventModal(event, defaultDate) {
     }
     document.getElementById('evSource').value = editTarget.source || 'local';
     document.getElementById('evMemo').value   = (event.memo || editTarget.memo || '');
+    // 🆕 v26.7.22 카테고리 — 원격 일정이면 캘린더 이름 매칭으로 되살림 (eventCategory)
+    fillCategorySelect((eventCategory(editTarget) || eventCategory(event) || {}).id || '');
     // 기존 알람들을 editingAlarms에 채워서 칩(chip) 활성화 상태로
     (editTarget.alarms || []).forEach(a => state.editingAlarms.add(a));
 
@@ -1841,6 +1978,8 @@ function openEventModal(event, defaultDate) {
       document.getElementById('evSource').value = state.googleAuthenticated ? 'google' : 'local';
     }
     document.getElementById('evMemo').value   = '';
+    // 🆕 v26.7.22 카테고리 초기화 (분류 없음)
+    fillCategorySelect('');
 
     // 🆕 v26.5.8a 반복 폼 초기화
     fillRecurrenceForm('');
@@ -1908,6 +2047,9 @@ function updateEventCalendarDropdown(event) {
   const row = document.getElementById('evCalendarRow');
   const sel = document.getElementById('evCalendar');
 
+  // 🆕 v26.7.22 카테고리 행은 로컬일 때만 (원격은 캘린더 자체가 분류 역할)
+  updateEventCategoryRow(source);
+
   if (source === 'local') {
     row.style.display = 'none';
     return;
@@ -1943,17 +2085,96 @@ function updateEventCalendarDropdown(event) {
     const isInstanceEdit = !!(event._virtualOf || event.recurrenceId);
     sel.disabled = isInstanceEdit;
   } else {
+    // 🆕 v26.7.22 카테고리가 선택돼 있으면 "같은 이름의 캘린더"를 최우선으로 집는다.
+    //   로컬 "업무" → 저장 위치를 Google 로 바꾸면 Google 의 "업무" 캘린더가 자동 선택됨
+    //   (= 원격으로 옮겨도 분류가 유지되는 지점).
+    let picked = null;
+    const cat = categoryById(selectedCategoryId());
+    if (cat) picked = findCalendarByName(source, cat.name);
+
     // 🆕 v26.5.9f 신규: defaultTarget 이 이 source 의 특정 캘린더를 가리키면 그걸 우선,
     // 아니면 source 의 isPrimary 캘린더로 폴백.
-    const dt = resolveDefaultTarget();
-    let picked = null;
-    if (dt && dt.source === source) {
-      picked = calendars.find(c => (source === 'google' ? c.id : c.url) === dt.id) || null;
+    if (!picked) {
+      const dt = resolveDefaultTarget();
+      if (dt && dt.source === source) {
+        picked = calendars.find(c => (source === 'google' ? c.id : c.url) === dt.id) || null;
+      }
     }
     if (!picked) picked = calendars.find(c => c.isPrimary) || null;
     if (picked) sel.value = source === 'google' ? picked.id : picked.url;
     sel.disabled = false;
   }
+}
+
+/**
+ * 🆕 v26.7.22 일정 모달의 카테고리 드롭다운 갱신.
+ *
+ * - source 가 'local' 일 때만 보임 (원격은 캘린더 선택이 곧 분류)
+ * - 힌트 줄에 "이 카테고리와 같은 이름의 원격 캘린더가 있는지" 표시.
+ *   있으면 저장 위치를 원격으로 바꿀 때 그 캘린더가 자동 선택된다는 안내.
+ *
+ * @param {string} source  현재 evSource 값
+ */
+function updateEventCategoryRow(source) {
+  const row  = document.getElementById('evCategoryRow');
+  const sel  = document.getElementById('evCategory');
+  const hint = document.getElementById('evCategoryHint');
+  if (!row || !sel) return;
+
+  row.style.display = (source === 'local') ? 'block' : 'none';
+  if (source !== 'local') return;
+
+  fillCategorySelect(sel.value);   // 현재 선택값 보존하며 옵션 재구성
+  if (hint) hint.textContent = categoryLinkHint(sel.value);
+}
+
+/**
+ * 🆕 v26.7.22 카테고리 <select> 의 옵션을 state.categories 로 다시 채우고 값 지정.
+ * 옵션이 없는 상태에서 .value 를 넣으면 씹히므로 반드시 이 헬퍼를 통해 설정할 것.
+ * @param {string} catId  선택할 카테고리 id ('' 이면 분류 없음)
+ */
+/** 🆕 v26.7.22 카테고리 드롭다운의 "새로 만들기" 항목 값 (실제 카테고리 id 와 안 겹치는 sentinel) */
+const CAT_NEW_OPTION = '__new_category__';
+
+/** 🆕 v26.7.22 "＋ 새 카테고리 만들기…" 를 골랐을 때 되돌릴 직전 값.
+ *  change 이벤트에는 이전 값이 안 실려오므로 별도로 들고 있어야 함. */
+let evCategoryLastValue = '';
+
+function fillCategorySelect(catId) {
+  const sel = document.getElementById('evCategory');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">(분류 없음)</option>' +
+    (state.categories || []).map(c =>
+      `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)}</option>`
+    ).join('') +
+    // 🆕 v26.7.22 여기서 바로 카테고리를 만들 수 있게 (관리 모달로 연결).
+    //   선택되면 값을 되돌리고 모달만 열기 — 실제 저장값이 되진 않음.
+    `<option value="${CAT_NEW_OPTION}">＋ 새 카테고리 만들기…</option>`;
+  sel.value = categoryById(catId) ? catId : '';
+  evCategoryLastValue = sel.value;
+}
+
+/** 🆕 v26.7.22 폼의 카테고리 선택값 → 실제 카테고리 id ('' 또는 sentinel 이면 null) */
+function selectedCategoryId() {
+  const v = document.getElementById('evCategory').value;
+  return categoryById(v) ? v : null;
+}
+
+/**
+ * 🆕 v26.7.22 카테고리 → 원격 캘린더 연동 상태 한 줄 안내.
+ * @param {string} catId
+ * @returns {string} 힌트 문구 (없으면 빈 문자열 → .rec-hint:empty 로 숨겨짐)
+ */
+function categoryLinkHint(catId) {
+  const cat = categoryById(catId);
+  if (!cat) return '';
+  const linked = [];
+  if (state.googleAuthenticated    && findCalendarByName('google', cat.name))    linked.push('Google');
+  if (state.nextcloudAuthenticated && findCalendarByName('nextcloud', cat.name)) linked.push('NextCloud');
+  if (linked.length) {
+    return `🔗 ${linked.join(' · ')} 의 "${cat.name}" 캘린더와 연동됨 — 저장 위치를 바꾸면 그 캘린더로 들어갑니다.`;
+  }
+  return `"${cat.name}" 이름의 원격 캘린더가 없습니다. 원격으로 저장해도 분류(색)는 그대로 유지됩니다.`;
 }
 
 /**
@@ -2492,6 +2713,10 @@ async function saveEvent() {
     endTime: document.getElementById('evEndTime').value,
     source:  document.getElementById('evSource').value,
     memo:    document.getElementById('evMemo').value,
+    // 🆕 v26.7.22 카테고리. 원격으로 저장할 때도 그대로 들고 감 —
+    //   같은 이름의 원격 캘린더가 없어도 분류(색)가 안 사라지고,
+    //   나중에 다시 로컬로 돌려도 카테고리가 살아있음.
+    categoryId: selectedCategoryId(),
     // 시간이 없으면 알람도 없음 (종일 일정은 알람 불가)
     alarms: time ? Array.from(state.editingAlarms) : []
   };
@@ -2505,6 +2730,20 @@ async function saveEvent() {
     data.googleCalendarId = calendarValue;
   } else if (data.source === 'nextcloud' && calendarValue) {
     data.ncCalendarUrl = calendarValue;
+  }
+
+  // 🆕 v26.7.22 카테고리를 원격으로 보낼 때: 같은 이름의 캘린더가 있으면 그 캘린더로 강제.
+  //   (드롭다운에서 사용자가 직접 다른 캘린더를 골랐어도, 카테고리 = 캘린더 라는 규약을
+  //    깨지 않도록 이름 일치 캘린더가 있으면 그쪽을 우선. 없으면 선택값 그대로 + 안내.)
+  if (data.categoryId && data.source !== 'local') {
+    const cat = categoryById(data.categoryId);
+    const match = cat ? findCalendarByName(data.source, cat.name) : null;
+    if (match) {
+      if (data.source === 'google')  data.googleCalendarId = match.id;
+      else                           data.ncCalendarUrl    = match.url;
+    } else if (cat) {
+      toast(`"${cat.name}" 캘린더가 없어 선택한 캘린더로 저장합니다 (분류는 유지)`, 3500);
+    }
   }
 
   // 🆕 v26.5.8b 폼에서 RRULE 수집 + 로컬 또는 NextCloud 허용
@@ -2788,6 +3027,7 @@ async function saveRecurrenceEdit(ctx, formData, formRrule) {
         // 🆕 v26.5.8b 자식의 source 는 마스터 따라감 (NextCloud 마스터면 자식도 NextCloud)
         source: master.source,
         memo: formData.memo,
+        categoryId: formData.categoryId,   // 🆕 v26.7.22
         alarms: formData.alarms,
         recurrenceId: master.id,
         originalStart: ctx.instanceDate,
@@ -2810,6 +3050,7 @@ async function saveRecurrenceEdit(ctx, formData, formRrule) {
           endDate: formData.endDate,
           endTime: formData.endTime,
           memo: formData.memo,
+          categoryId: formData.categoryId,   // 🆕 v26.7.22
           alarms: formData.alarms
           // source/recurrenceId/originalStart 그대로 유지 (마스터 따라가는 source 보존)
         };
@@ -2869,6 +3110,7 @@ async function saveRecurrenceEdit(ctx, formData, formRrule) {
       // 🆕 v26.5.8b 새 마스터 source 도 원본 마스터 따라감
       source: master.source,
       memo: formData.memo,
+      categoryId: formData.categoryId,   // 🆕 v26.7.22
       alarms: formData.alarms,
       recurrence: newRrule,
       exdates: [],
@@ -2897,6 +3139,7 @@ async function saveRecurrenceEdit(ctx, formData, formRrule) {
       endTime: formData.endTime,
       // 🆕 v26.5.8b source 는 마스터(원본) 그대로 유지
       memo: formData.memo,
+      categoryId: formData.categoryId,   // 🆕 v26.7.22
       alarms: formData.alarms,
       recurrence: formRrule || master.recurrence,
       exdates: master.exdates || []
@@ -3086,6 +3329,16 @@ function applyFontSize() {
   document.getElementById('fontSlider').value = state.fontSize;
 }
 
+/**
+ * 🆕 v26.7.22 일정 제목 여러 줄 표시 적용.
+ * .widget 에 .event-wrap 클래스만 토글 — 실제 줄바꿈/스크롤은 CSS 가 처리.
+ */
+function applyEventWrap() {
+  document.getElementById('widget').classList.toggle('event-wrap', !!state.eventWrap);
+  const cb = document.getElementById('eventWrapToggle');
+  if (cb) cb.checked = !!state.eventWrap;
+}
+
 /** 🆕 v26.5.9b 테마 적용 — html 에 .theme-dark 토글 + 토글 버튼 active 갱신.
  *  이벤트 칩 inline style 은 테마에 따라 달라지므로 호출 후 renderCalendar 필요. */
 function applyTheme() {
@@ -3164,9 +3417,16 @@ async function refreshGoogleAuthStatus() {
     }
 
     // 🆕 캘린더별 색상 lookup 재구성: customColor > backgroundColor > 폴백
+    // 🆕 v26.7.22 메타(이름 + 사용자 지정색 여부)도 같이 재구성 — eventColor / 카테고리 이름 매칭용
     state.calendarColors.google = {};
+    state.calendarMeta.google = {};
     state.googleSelectedCalendars.forEach(c => {
       state.calendarColors.google[c.id] = c.customColor || c.backgroundColor || '#4285f4';
+      state.calendarMeta.google[c.id] = {
+        name: calDisplayName(c, 'google'),
+        // customColor 가 Google 기본색과 다르면 "사용자가 직접 고른 색"으로 간주
+        custom: !!(c.customColor && c.customColor !== c.backgroundColor)
+      };
     });
 
     const btn     = document.getElementById('googleAuthBtn');
@@ -3216,9 +3476,15 @@ async function refreshNextcloudAuthStatus() {
     state.nextcloudCalendarName = primary ? primary.displayName : null;
 
     // 🆕 캘린더별 색상 lookup 재구성 (NextCloud는 url이 키)
+    // 🆕 v26.7.22 메타(이름 + 사용자 지정색 여부)도 같이 — NC 는 서버 기본색이 없어 customColor 유무가 곧 custom
     state.calendarColors.nextcloud = {};
+    state.calendarMeta.nextcloud = {};
     state.nextcloudSelectedCalendars.forEach(c => {
       state.calendarColors.nextcloud[c.url] = c.customColor || '#0082c9';
+      state.calendarMeta.nextcloud[c.url] = {
+        name: calDisplayName(c, 'nextcloud'),
+        custom: !!c.customColor
+      };
     });
 
     const btn = document.getElementById('nextcloudAuthBtn');
@@ -3797,6 +4063,24 @@ document.getElementById('evSource').addEventListener('change', () => {
   updateEventCalendarDropdown(null);   // 신규 모드로 갱신 (편집 시엔 source 변경 가능)
 });
 
+// 🆕 v26.7.22 카테고리 변경 → 연동 안내 힌트 갱신.
+//   (로컬 → 원격으로 저장 위치를 바꿀 때 이 값이 캘린더 자동 선택의 기준이 됨)
+// 🆕 v26.7.22 "＋ 새 카테고리 만들기…" 를 고르면 값은 되돌리고 관리 모달을 띄움.
+//   모달에서 저장하면 새로 만든 카테고리가 이 드롭다운에 자동 선택됨 (catSave 핸들러).
+document.getElementById('evCategory').addEventListener('change', () => {
+  const sel  = document.getElementById('evCategory');
+  const hint = document.getElementById('evCategoryHint');
+
+  if (sel.value === CAT_NEW_OPTION) {
+    fillCategorySelect(evCategoryLastValue);   // 사용자가 고르기 직전 값으로 복구
+    openCategoryModal({ fromEventModal: true, addRow: true });
+    return;
+  }
+
+  evCategoryLastValue = sel.value;
+  if (hint) hint.textContent = categoryLinkHint(sel.value);
+});
+
 // 알람 칩 클릭 → editingAlarms에 추가/제거
 document.querySelectorAll('.alarm-chip').forEach(chip => {
   chip.addEventListener('click', () => {
@@ -3884,6 +4168,14 @@ document.getElementById('fontSlider').addEventListener('input', async e => {
   state.fontSize = parseFloat(e.target.value);
   applyFontSize();
   await saveSettings();
+});
+
+// 🆕 v26.7.22 "일정 제목 여러 줄" 토글 — CSS 클래스만 바뀌므로 재렌더 불필요
+document.getElementById('eventWrapToggle').addEventListener('change', async e => {
+  state.eventWrap = e.target.checked;
+  applyEventWrap();
+  await saveSettings();
+  toast(state.eventWrap ? '일정 제목 여러 줄 표시 ON' : '일정 제목 한 줄 표시');
 });
 
 // 🆕 v26.5.9b 테마 토글 (Light / Dark) — 클릭 시 즉시 적용 + 캘린더 재렌더 (이벤트 칩 색 갱신)
@@ -4200,6 +4492,214 @@ document.getElementById('gcalRevoke').addEventListener('click', async () => {
 
 
 // ╔══════════════════════════════════════════════════════════════════╗
+// ║  ▼ 🆕 v26.7.22 카테고리 관리 모달 (로컬 일정용 "내 캘린더")           ║
+// ║                                                                  ║
+// ║  설정 패널 "로컬 카테고리 → 관리" 로 열림.                          ║
+// ║  색상 피커 + 이름 편집 + 삭제 + 추가. draft 로 편집하다 저장 시 반영.  ║
+// ║                                                                  ║
+// ║  ⚠ 텍스트 input 이 있으므로 modalAotBypass 필수                     ║
+// ║    (alwaysOnTop 상태에선 이거 없이 키보드 입력이 안 들어옴)           ║
+// ╚══════════════════════════════════════════════════════════════════╝
+
+const catModalBg = document.getElementById('catModalBg');
+
+// 모달이 열려있는 동안의 임시 편집 상태: [{ id, name, color }]
+let catDraft = [];
+
+// 🆕 v26.7.22 일정 모달의 "＋ 새 카테고리 만들기…" 로 열렸는지.
+// true 면 닫을 때 alwaysOnTop 을 복원하지 않고(일정 모달이 아직 떠있으므로) bypass 를 유지하고,
+// 저장 시 새로 만든 카테고리를 일정 모달의 드롭다운에 자동 선택해준다.
+let catOpenedFromEventModal = false;
+
+/** 카테고리용 고유 id */
+function catUid() { return 'cat_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5); }
+
+/**
+ * 카테고리 관리 모달 열기.
+ * @param {object} [opts]
+ * @param {boolean} [opts.fromEventModal]  일정 모달 위에 겹쳐 열림 (닫을 때 AOT 복원 안 함)
+ * @param {boolean} [opts.addRow]          열자마자 빈 행 하나 추가 + 이름 입력에 포커스
+ */
+function openCategoryModal(opts = {}) {
+  catOpenedFromEventModal = !!opts.fromEventModal;
+  catDraft = (state.categories || []).map(c => ({ id: c.id, name: c.name, color: c.color }));
+  renderCatList();
+  // alwaysOnTop 임시 해제 + 포커스 (이름 input 에 타이핑 되게)
+  if (isElectron && window.electronAPI.modalAotBypass) {
+    window.electronAPI.modalAotBypass(true).catch(() => {});
+  }
+  catModalBg.classList.add('show');
+  if (opts.addRow) addCategoryRow();
+}
+
+function closeCategoryModal() {
+  catModalBg.classList.remove('show');
+  catDraft = [];
+  if (isElectron && window.electronAPI.modalAotBypass) {
+    // 🆕 v26.7.22 일정 모달 위에서 열렸으면 AOT 를 복원하면 안 됨 —
+    //   복원해버리면 아직 떠있는 일정 모달의 텍스트 입력이 먹통이 된다.
+    //   (bypass(true) 를 다시 걸어 포커스도 일정 모달로 돌려줌)
+    const keepBypass = catOpenedFromEventModal &&
+      document.getElementById('eventModalBg').classList.contains('show');
+    window.electronAPI.modalAotBypass(keepBypass).catch(() => {});
+  }
+  catOpenedFromEventModal = false;
+}
+
+/** 새 카테고리 행 추가 + 이름 입력에 포커스 (＋ 버튼 / fromEventModal 진입 공용) */
+function addCategoryRow() {
+  // 기본 팔레트에서 아직 안 쓴 색 우선 배정
+  const palette = ['#f4511e', '#8e24aa', '#0b8043', '#3f51b5', '#e67c73', '#039be5', '#7cb342', '#d81b60'];
+  const used = new Set(catDraft.map(c => (c.color || '').toLowerCase()));
+  const color = palette.find(p => !used.has(p)) || palette[catDraft.length % palette.length];
+  catDraft.push({ id: catUid(), name: '', color });
+  renderCatList();
+  // 새로 추가한 행의 이름 input 에 포커스 (바로 이름을 타이핑할 수 있게)
+  const inputs = document.querySelectorAll('#catList .cat-name-input');
+  if (inputs.length) inputs[inputs.length - 1].focus();
+}
+
+/**
+ * 카테고리 목록 다시 그리기.
+ * 이름 input 은 재렌더 시 포커스가 날아가므로 input 이벤트에선 draft 만 갱신하고
+ * 재렌더하지 않음 (색상 피커도 동일). 삭제/추가만 재렌더.
+ */
+function renderCatList() {
+  const list = document.getElementById('catList');
+
+  if (catDraft.length === 0) {
+    list.innerHTML = '<div class="cal-select-empty">' +
+      '카테고리가 없습니다 — 모든 로컬 일정이 <b>(분류 없음)</b> 으로 저장됩니다.<br>' +
+      '아래 <b>＋ 카테고리 추가</b> 로 이름과 색을 직접 만드세요.' +
+      '</div>';
+    return;
+  }
+
+  list.innerHTML = catDraft.map((c, i) => {
+    // 같은 이름의 원격 캘린더가 선택돼 있으면 "연동됨" 뱃지
+    const linked = [];
+    if (state.googleAuthenticated    && findCalendarByName('google', c.name))    linked.push('G');
+    if (state.nextcloudAuthenticated && findCalendarByName('nextcloud', c.name)) linked.push('NC');
+    const badge = linked.length
+      ? `<span class="cat-link-badge linked" title="같은 이름의 원격 캘린더와 연동됨">🔗 ${linked.join('·')}</span>`
+      : `<span class="cat-link-badge unlinked" title="같은 이름의 원격 캘린더 없음 (로컬 전용)">로컬</span>`;
+
+    return `
+    <div class="cal-select-item" data-idx="${i}">
+      <input type="color" class="cal-color-input" value="${escapeHtml(c.color)}" title="클릭하여 색상 변경">
+      <input type="text" class="cat-name-input" value="${escapeHtml(c.name)}" placeholder="카테고리 이름" maxlength="24">
+      ${badge}
+      <button class="cat-delete" title="삭제">✕</button>
+    </div>
+  `;
+  }).join('');
+
+  // 색상 변경 — draft 만 갱신 (재렌더 X, 피커 포커스 보존)
+  list.querySelectorAll('.cal-color-input').forEach(inp => {
+    inp.addEventListener('input', () => {
+      const i = parseInt(inp.closest('.cal-select-item').dataset.idx, 10);
+      catDraft[i].color = inp.value;
+    });
+  });
+
+  // 이름 변경 — draft 만 갱신 (재렌더 X, 타이핑 중 포커스 보존)
+  list.querySelectorAll('.cat-name-input').forEach(inp => {
+    inp.addEventListener('input', () => {
+      const i = parseInt(inp.closest('.cal-select-item').dataset.idx, 10);
+      catDraft[i].name = inp.value;
+    });
+    // 이름을 다 치고 focus 를 뺄 때 연동 뱃지를 갱신 (이름 == 캘린더 이름 매칭 결과가 바뀌므로)
+    inp.addEventListener('blur', () => renderCatList());
+  });
+
+  // 삭제
+  list.querySelectorAll('.cat-delete').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const i = parseInt(btn.closest('.cal-select-item').dataset.idx, 10);
+      const cat = catDraft[i];
+      const used = state.events.filter(e => e.categoryId === cat.id).length;
+      const msg = used > 0
+        ? `"${cat.name}" 카테고리를 삭제할까요?\n이 카테고리를 쓰는 일정 ${used}개는 "분류 없음"이 됩니다. (일정 자체는 삭제되지 않습니다)`
+        : `"${cat.name}" 카테고리를 삭제할까요?`;
+      if (!confirm(msg)) return;
+      catDraft.splice(i, 1);
+      renderCatList();
+    });
+  });
+}
+
+document.getElementById('catAdd').addEventListener('click', addCategoryRow);
+
+document.getElementById('catCancel').addEventListener('click', closeCategoryModal);
+
+catModalBg.addEventListener('click', e => {
+  if (e.target.id === 'catModalBg') closeCategoryModal();
+});
+
+document.getElementById('catSave').addEventListener('click', async () => {
+  // 이름 정리 + 검증 (이름이 빈 행은 만들다 만 것으로 보고 버림)
+  const cleaned = catDraft
+    .map(c => ({ id: c.id, name: (c.name || '').trim(), color: c.color || '#34a853' }))
+    .filter(c => c.name);
+
+  // 저장 전에 "이번에 새로 만든 카테고리" 를 기억 — 일정 모달에 자동 선택해주기 위해
+  const prevIds = new Set((state.categories || []).map(c => c.id));
+  const addedId = (cleaned.find(c => !prevIds.has(c.id)) || {}).id || null;
+  const wasFromEventModal = catOpenedFromEventModal;
+
+  // 이름 중복 차단 — 이름이 원격 캘린더와의 연결 키라서 중복되면 매칭이 모호해짐
+  const seen = new Set();
+  for (const c of cleaned) {
+    const k = normCatName(c.name);
+    if (seen.has(k)) { toast(`카테고리 이름이 중복됩니다: "${c.name}"`, 3500); return; }
+    seen.add(k);
+  }
+
+  // 삭제된 카테고리를 쓰던 일정은 "분류 없음"으로 정리 (dangling categoryId 방지)
+  const aliveIds = new Set(cleaned.map(c => c.id));
+  let orphaned = 0;
+  state.events.forEach(e => {
+    if (e.categoryId && !aliveIds.has(e.categoryId)) { delete e.categoryId; orphaned++; }
+  });
+
+  state.categories = cleaned;
+  await saveCategories();
+  if (orphaned > 0) await saveEvents();
+
+  closeCategoryModal();
+  renderCategorySummary();
+  renderCalendar();   // 색상 즉시 반영
+
+  // 🆕 v26.7.22 일정 모달이 아직 떠있으면 드롭다운을 새 목록으로 갱신.
+  //   여기서 방금 만든 카테고리가 있으면 그걸 바로 선택해준다.
+  if (document.getElementById('eventModalBg').classList.contains('show')) {
+    const pick = (wasFromEventModal && addedId) ? addedId : selectedCategoryId();
+    fillCategorySelect(pick);
+    const hint = document.getElementById('evCategoryHint');
+    if (hint) hint.textContent = categoryLinkHint(document.getElementById('evCategory').value);
+  }
+
+  toast(cleaned.length === 0 ? '카테고리를 모두 비웠습니다' : `카테고리 ${cleaned.length}개 저장됨`);
+});
+
+/** 설정 패널의 카테고리 요약 라벨 갱신 ("업무 · 개인 · 가족") */
+function renderCategorySummary() {
+  const el = document.getElementById('categorySummary');
+  if (!el) return;
+  const cats = state.categories || [];
+  el.textContent = cats.length === 0
+    ? '(분류 없음)'
+    : cats.slice(0, 3).map(c => c.name).join(' · ') + (cats.length > 3 ? ` 외 ${cats.length - 3}개` : '');
+}
+
+document.getElementById('categoryManageBtn').addEventListener('click', e => {
+  e.stopPropagation();
+  closeAllCalendarModals();
+  openCategoryModal();
+});
+
+
+// ╔══════════════════════════════════════════════════════════════════╗
 // ║  ▼ NextCloud 인증 + 캘린더 선택 모달                                ║
 // ║                                                                  ║
 // ║  2단계 모달:                                                       ║
@@ -4233,6 +4733,9 @@ function closeAllCalendarModals() {
   // Google
   document.getElementById('gcalModalBg')?.classList.remove('show');
   gcalDraft = [];
+  // 🆕 v26.7.22 카테고리
+  document.getElementById('catModalBg')?.classList.remove('show');
+  catDraft = [];
 }
 
 /** NextCloud 모달 닫기. 비밀번호 필드는 보안상 매번 비움 */
@@ -4909,7 +5412,8 @@ window.addEventListener('blur', () => {
     document.getElementById('eventModalBg').classList.contains('show') ||
     document.getElementById('ncModalBg').classList.contains('show') ||
     document.getElementById('gcalModalBg').classList.contains('show') ||
-    document.getElementById('ncManageModalBg').classList.contains('show');
+    document.getElementById('ncManageModalBg').classList.contains('show') ||
+    document.getElementById('catModalBg').classList.contains('show');   // 🆕 v26.7.22
   if (anyModalOpen) return;
 
   document.getElementById('settingsPanel').classList.remove('show');
@@ -4935,7 +5439,8 @@ document.addEventListener('visibilitychange', () => {
       document.getElementById('eventModalBg').classList.contains('show') ||
       document.getElementById('ncModalBg').classList.contains('show') ||
       document.getElementById('gcalModalBg').classList.contains('show') ||
-      document.getElementById('ncManageModalBg').classList.contains('show');
+      document.getElementById('ncManageModalBg').classList.contains('show') ||
+      document.getElementById('catModalBg').classList.contains('show');   // 🆕 v26.7.22
     if (anyModalOpen) return;
 
     document.getElementById('settingsPanel').classList.remove('show');
@@ -4985,7 +5490,8 @@ if (isElectron) {
       document.getElementById('eventModalBg').classList.contains('show') ||
       document.getElementById('ncModalBg').classList.contains('show') ||
       document.getElementById('gcalModalBg').classList.contains('show') ||
-      document.getElementById('ncManageModalBg').classList.contains('show');
+      document.getElementById('ncManageModalBg').classList.contains('show') ||
+      document.getElementById('catModalBg').classList.contains('show');   // 🆕 v26.7.22
     if (anyModalOpen) return;
 
     document.getElementById('settingsPanel').classList.remove('show');
@@ -5020,6 +5526,8 @@ if (isElectron) {
   applyOpacity();        // 투명도 → CSS 변수
   applyFontSize();       // 폰트 크기 → CSS 변수
   applyTheme();          // 🆕 v26.5.9b 테마(light/dark) → html 클래스 + 토글 active
+  applyEventWrap();      // 🆕 v26.7.22 일정 제목 여러 줄 → .widget.event-wrap 클래스
+  renderCategorySummary();  // 🆕 v26.7.22 설정 패널의 카테고리 요약 라벨
   applyLayout();         // 레이아웃 → 그리드 종류 결정 + renderCalendar 호출
 
   // 3) 메모 렌더링 + 알람 예약

@@ -22,7 +22,13 @@ There is no test runner, linter, or formatter configured — don't fabricate one
 `google-config.json` (OAuth client_id/client_secret) is required for Google features and is gitignored. CI restores it from `secrets.GOOGLE_CONFIG_JSON` or falls back to a dummy. Node 22+.
 
 ### Releases
-Pushing a `v*` tag triggers `.github/workflows/build-{mac,win}.yml`, which builds and attaches artifacts to a GitHub Release automatically. `package.json` `version` should be bumped first. Existing commit-message convention: `vXX.Y.Zx <korean summary>` (see `git log`).
+Pushing a `v*` tag triggers `.github/workflows/build-{mac,win}.yml`, which builds and attaches artifacts to a GitHub Release automatically. `package.json` `version` must be bumped first, and commit message + tag must use the same version.
+
+**Versioning is date-based (as of v26.7.22): `vYY.M.D` from the release date, no zero padding** — work released on 2026-07-22 is `v26.7.22`. A *second* release on the same day appends a letter that grows alphabetically: `v26.7.22a`, then `v26.7.22b`, … The first release of the next day resets to plain `v26.7.23`. Never carry the previous day's number forward — always re-derive from today's date. (Versions before v26.6.7 used an unrelated sequential scheme; don't extrapolate from them.)
+
+- `package.json` version drops the leading `v` (`"26.7.22"`). Note the letter suffix form (`26.7.22a`) is not strictly valid semver — it has been used before (`26.5.28d`, `26.5.9f`) without breaking electron-builder, but if a build ever fails on version parsing, that is the first thing to check.
+- Commit message convention: `vYY.M.D[letter] <korean summary>` (see `git log`).
+- In-code `// 🆕 vYY.M.D` markers use the version the change actually ships in — don't renumber them later, and don't add a letter suffix to markers for work that hasn't shipped yet.
 
 ## Architecture
 
@@ -44,16 +50,29 @@ Renderer ↔ main is contextIsolated; renderer never `require()`s Node modules. 
 
 ### State model (renderer)
 
-`state` (top of `renderer/app.js`) is the single source of truth: `events[]`, `memos[]`, layout/opacity/font, auth status, `googleSelectedCalendars`, `nextcloudSelectedCalendars`, `calendarColors` lookup, `syncedRange`. Everything writes to `state` then calls `renderCalendar()` / `renderMemos()`. Persistence uses `loadJSON`/`saveJSON` keys: `cal_events_v4`, `cal_memos_v4`, `cal_settings_v4`. Bumping the schema means bumping the `_v4` suffix and writing a migration in `loadAll()` (see `v26.5.8f` orphan migration there for the pattern).
+`state` (top of `renderer/app.js`) is the single source of truth: `events[]`, `memos[]`, `categories[]`, layout/opacity/font, auth status, `googleSelectedCalendars`, `nextcloudSelectedCalendars`, `calendarColors` / `calendarMeta` lookups, `syncedRange`. Everything writes to `state` then calls `renderCalendar()` / `renderMemos()`. Persistence uses `loadJSON`/`saveJSON` keys: `cal_events_v4`, `cal_memos_v4`, `cal_settings_v4`, `cal_categories_v1`. Bumping the schema means bumping the version suffix and writing a migration in `loadAll()` (see `v26.5.8f` orphan migration there for the pattern).
 
 ### Event identity & sources
 
 Each event has a `source` of `'local' | 'google' | 'nextcloud'` plus source-specific fields:
 - Google: `googleId` + `googleCalendarId`; renderer id = `g_<calendarId>_<googleId>`
 - NextCloud: `ncUrl`, `ncEtag`, `ncCalendarUrl`
-- Local: random `uid()` id
+- Local: random `uid()` id, optional `categoryId` (see Local categories below — kept on the event even after a push to a remote source)
 
-Color resolution flows through `eventColor()` → `state.calendarColors` (per-source per-calendar customization) → calendar's default backgroundColor → `sourceColor()` fallback. Don't hardcode source colors in new code; route through these helpers so the user's color customization keeps working.
+Color resolution flows through `eventColor()`. For local events: category color → `sourceColor('local')`. For remote events: user-picked per-calendar `customColor` (`state.calendarMeta[source][id].custom`) → name-matched category color → calendar's default backgroundColor (`state.calendarColors`) → `sourceColor()` fallback. Don't hardcode source colors in new code; route through these helpers so the user's color customization keeps working.
+
+### Local categories (v26.7.22)
+
+`state.categories` (`[{id, name, color}]`, persisted under `cal_categories_v1`) gives local events a "my calendars" grouping. Local events carry `categoryId`. **The list starts empty** — every local event is `(분류 없음)` until the user creates categories themselves in the manager modal; never seed names, since the name is the join key to a remote calendar and an app-chosen name would silently bind to the wrong calendar. (`loadAll()` carries a v26.7.22 migration that drops the short-lived 업무/개인/가족 seed when untouched and unused.)
+
+**Name is the join key between a category and a remote calendar.** `findCalendarByName()` / `categoryByName()` compare trimmed + lowercased names, and that single convention drives the whole round trip:
+
+- Changing 저장 위치 from local → google/nextcloud auto-selects the calendar whose display name equals the category name (in `updateEventCalendarDropdown`), and `saveEvent()` re-forces that calendar just before push. If no such calendar exists, the event is pushed to the selected calendar and keeps its `categoryId` so the color survives.
+- Events synced *down* from a calendar named e.g. "업무" resolve back to that category via `eventCategory()` — remote events never store `categoryId` server-side, the name match recovers it.
+
+`state.calendarMeta.{google,nextcloud}` (`{ '<id|url>': { name, custom } }`) is rebuilt alongside `state.calendarColors` in `refreshGoogleAuthStatus` / `refreshNextcloudAuthStatus`; `custom` records whether the user explicitly picked a color in the calendar modal, which is what lets an explicit color outrank the category color. If you add a new remote source, populate both maps.
+
+The category manager modal (`catModalBg`, `openCategoryModal`) edits a `catDraft` copy; on save, events pointing at deleted categories have `categoryId` stripped. Duplicate names are rejected — they would make the remote-calendar match ambiguous. It can be opened stacked on top of the event modal via the dropdown's `＋ 새 카테고리 만들기…` entry (`CAT_NEW_OPTION`); in that case `closeCategoryModal()` must re-assert `modalAotBypass(true)` rather than restoring alwaysOnTop, or the still-open event modal loses keyboard input.
 
 ### Sync state
 

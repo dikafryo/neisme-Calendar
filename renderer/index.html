@@ -152,6 +152,25 @@
       <input type="range" id="fontSlider" min="9" max="18" step="0.5" value="10">
       <span class="settings-value" id="fontValue">10pt</span>
     </div>
+    <!-- 🆕 v26.7.22 긴 일정 제목을 잘라내지 않고 여러 줄로 펼쳐서 전체 표시 -->
+    <div class="settings-row">
+      <span>일정 제목 여러 줄</span>
+      <input type="checkbox" id="eventWrapToggle">
+    </div>
+
+    <div class="settings-divider"></div>
+
+    <!-- ── 🆕 v26.7.22 로컬 일정 카테고리 (업무/개인 등) ── -->
+    <h4>🏷 카테고리</h4>
+    <div class="settings-row">
+      <div class="account-info">
+        <span class="account-name">로컬 일정 카테고리</span>
+        <span class="account-email" id="categorySummary">0개</span>
+      </div>
+      <div class="account-controls">
+        <button class="account-btn" id="categoryManageBtn">관리</button>
+      </div>
+    </div>
 
     <div class="settings-divider"></div>
 
@@ -322,6 +341,15 @@
     <div id="evCalendarRow" style="display:none">
       <label>캘린더</label>
       <select id="evCalendar"></select>
+    </div>
+
+    <!-- 🆕 v26.7.22 카테고리 선택 (source가 local일 때만 보임).
+         카테고리 이름과 같은 이름의 Google/NextCloud 캘린더가 있으면
+         저장 위치를 원격으로 바꿀 때 그 캘린더가 자동 선택됨 (= 카테고리 유지). -->
+    <div id="evCategoryRow" style="display:none">
+      <label>카테고리</label>
+      <select id="evCategory"></select>
+      <div id="evCategoryHint" class="rec-hint"></div>
     </div>
 
     <!-- 🆕 v26.5.8a 반복 옵션 -->
@@ -527,6 +555,35 @@
         <button class="btn btn-secondary" id="ncManageCancel">취소</button>
         <button class="btn btn-primary" id="ncManageSave">저장</button>
       </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ╔════════════════════════════════════════════════════════════════════╗
+     ║  🆕 v26.7.22 카테고리 관리 모달 (로컬 일정용 "내 캘린더")               ║
+     ║                                                                      ║
+     ║  설정 패널의 "로컬 카테고리 → 관리" 버튼으로 열림.                     ║
+     ║  - 색상 피커 + 이름 입력 + 삭제                                        ║
+     ║  - 각 행 우측에 Google/NextCloud 연동 상태 뱃지                        ║
+     ║    (같은 이름의 원격 캘린더가 선택돼 있으면 "연동됨")                   ║
+     ╚════════════════════════════════════════════════════════════════════╝ -->
+<div class="modal-bg" id="catModalBg">
+  <div class="modal">
+    <h3>카테고리 관리</h3>
+    <p class="cal-select-hint">
+      로컬 일정을 분류하는 <b>내 캘린더</b>입니다. 이름과 색을 직접 정하세요.<br>
+      카테고리와 <b>같은 이름</b>의 Google · NextCloud 캘린더가 있으면,
+      저장 위치를 원격으로 바꿀 때 그 캘린더가 자동 선택되어 분류가 유지됩니다.
+    </p>
+
+    <div id="catList" class="cal-select-list"></div>
+
+    <button class="link-btn" id="catAdd" style="margin-top:8px">＋ 카테고리 추가</button>
+
+    <div class="modal-actions">
+      <button class="btn btn-secondary" id="catCancel">취소</button>
+      <button class="btn btn-primary" id="catSave">저장</button>
     </div>
   </div>
 </div>

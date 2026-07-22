@@ -1402,3 +1402,95 @@ body {
   overflow-x: hidden;
   overflow-y: auto;
 }
+
+/* ============================================================
+   🆕 v26.7.22 ① 일정 제목 여러 줄 표시 (설정 → 표시 → "일정 제목 여러 줄")
+   기본은 한 줄 + ellipsis. 켜면 셀 안에서 줄바꿈되어 제목 전체가 보임.
+   셀 높이를 넘어가면 셀 안에서 세로 스크롤 (내용 손실 방지).
+   ============================================================ */
+.widget.event-wrap .day-event {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+.widget.event-wrap .day-events {
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+}
+.widget.event-wrap .day-events::-webkit-scrollbar { width: 4px; }
+.widget.event-wrap .day-events::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.18);
+  border-radius: 2px;
+}
+/* 팝오버 일정 제목도 같이 펼침 (#dayPopover 는 .widget 의 뒤쪽 형제) */
+.widget.event-wrap ~ .day-popover .pop-event-title {
+  white-space: normal;
+  word-break: break-word;
+}
+
+/* ============================================================
+   🆕 v26.7.22 ② 로컬 일정 카테고리 (업무 / 개인 등)
+   ============================================================ */
+
+/* 카테고리 관리 모달의 행 — .cal-select-item 을 재사용하되 이름은 편집 가능한 input */
+.cat-name-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 4px 7px !important;
+  font-size: 12px !important;
+  border: 1px solid transparent !important;
+  background: transparent !important;
+  border-radius: 5px !important;
+  font-weight: 500;
+}
+.cat-name-input:hover  { border-color: #dfe3e8 !important; background: #fff !important; }
+.cat-name-input:focus  { border-color: #4285f4 !important; background: #fff !important; }
+
+/* 원격 캘린더 연동 상태 뱃지 */
+.cat-link-badge {
+  flex-shrink: 0;
+  font-size: 9.5px;
+  padding: 2px 6px;
+  border-radius: 9px;
+  white-space: nowrap;
+  font-weight: 600;
+}
+.cat-link-badge.linked   { background: #e6f4ea; color: #1e7e34; }
+.cat-link-badge.unlinked { background: #f1f3f4; color: #9aa0a6; }
+
+.cat-delete {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 13px;
+  padding: 1px 5px;
+  color: #c0c4c8;
+  border-radius: 4px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.cat-delete:hover { background: rgba(234, 67, 53, 0.1); color: #ea4335; }
+
+#catAdd { color: #4285f4; }
+#catAdd:hover { color: #1a73e8; }
+#catList { overflow-x: hidden; overflow-y: auto; }
+/* 빈 상태 안내는 두 줄이라 줄간격 확보 */
+#catList .cal-select-empty { line-height: 1.7; padding: 20px 16px; }
+#catList .cal-select-empty b { color: #666; }
+
+/* 일정 모달의 카테고리 드롭다운 */
+#evCategoryRow { margin-top: 8px; }
+
+/* 셀/팝오버의 카테고리 점 (일정 제목 앞) */
+.cat-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  margin-right: 3px;
+  vertical-align: middle;
+  flex-shrink: 0;
+}

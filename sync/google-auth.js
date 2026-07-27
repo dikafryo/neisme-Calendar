@@ -4,7 +4,9 @@
 //   - getSelectedCalendars / setSelectedCalendars: 동기화할 캘린더들 저장
 //   - getPrimaryCalendarId: 새 일정의 기본 저장 캘린더
 
-const { google } = require('googleapis');
+const { OAuth2Client } = require('google-auth-library');
+const { calendar } = require('@googleapis/calendar');
+const { oauth2 } = require('@googleapis/oauth2');
 const http = require('http');
 const { shell } = require('electron');
 const Store = require('electron-store');
@@ -46,7 +48,7 @@ function loadConfig() {
 
 function makeOAuthClient(redirectUri) {
   const config = loadConfig();
-  return new google.auth.OAuth2(config.client_id, config.client_secret, redirectUri);
+  return new OAuth2Client(config.client_id, config.client_secret, redirectUri);
 }
 
 // ─────────────────────────────────────────────
@@ -95,8 +97,8 @@ async function authenticate() {
           const { tokens } = await client.getToken(code);
           client.setCredentials(tokens);
 
-          const oauth2 = google.oauth2({ version: 'v2', auth: client });
-          const userInfo = await oauth2.userinfo.get();
+          const oauth2Api = oauth2({ version: 'v2', auth: client });
+          const userInfo = await oauth2Api.userinfo.get();
 
           tokenStore.set('tokens', tokens);
           tokenStore.set('email', userInfo.data.email);
@@ -182,8 +184,8 @@ function getConnectedAt() { return tokenStore.get('connectedAt') || null; }
 async function listCalendars() {
   const auth = getAuthenticatedClient();
   if (!auth) throw new Error('Google에 로그인되어 있지 않습니다');
-  const calendar = google.calendar({ version: 'v3', auth });
-  const res = await calendar.calendarList.list({ maxResults: 100, showHidden: false });
+  const cal = calendar({ version: 'v3', auth });
+  const res = await cal.calendarList.list({ maxResults: 100, showHidden: false });
   return (res.data.items || [])
     // 쓰기 권한 있는 것만 (reader는 읽기는 되지만 push 불가 → 일단 제외)
     .filter(c => ['owner', 'writer'].includes(c.accessRole))

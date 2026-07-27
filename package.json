@@ -1,6 +1,6 @@
 {
   "name": "neisme-calendar",
-  "version": "26.7.22",
+  "version": "26.0728.1",
   "description": "neisme Calendar - 바탕화면 반투명 캘린더 위젯 (Google Calendar / Tasks 연동)",
   "main": "main.js",
   "author": "디카프료 (neis.me)",
@@ -17,10 +17,13 @@
     "postinstall": "electron-builder install-app-deps"
   },
   "dependencies": {
+    "@googleapis/calendar": "^9.8.0",
+    "@googleapis/oauth2": "^3.0.1",
+    "@googleapis/tasks": "^4.3.0",
     "electron-store": "^8.2.0",
-    "googleapis": "^144.0.0",
-    "tsdav": "^2.1.5",
-    "ical.js": "^2.1.0"
+    "google-auth-library": "^9.15.1",
+    "ical.js": "^2.1.0",
+    "tsdav": "^2.1.5"
   },
   "devDependencies": {
     "electron": "^33.0.0",
@@ -31,19 +34,41 @@
     "publish": null,
     "productName": "neisme Calendar",
     "artifactName": "${productName} Setup ${version}.${ext}",
+    "compression": "maximum",
     "files": [
       "main.js",
       "preload.js",
       "renderer/**/*",
       "sync/**/*",
       "store/**/*",
-      "assets/**/*",
-      "google-config.json"
+      "assets/icon.ico",
+      "assets/icon.png",
+      "assets/iconTemplate.png",
+      "assets/iconTemplate@2x.png",
+      "google-config.json",
+      "!node_modules/**/*.md",
+      "!node_modules/**/*.ts",
+      "!node_modules/**/*.map",
+      "!node_modules/**/test/**",
+      "!node_modules/**/tests/**",
+      "!node_modules/**/__tests__/**",
+      "!node_modules/**/docs/**",
+      "!node_modules/**/.github/**",
+      "!node_modules/**/examples/**",
+      "!node_modules/**/CHANGELOG*",
+      "!node_modules/**/LICENSE*",
+      "!node_modules/**/README*"
     ],
     "win": {
-      "target": ["nsis"],
+      "target": [
+        "nsis",
+        "portable"
+      ],
       "icon": "assets/icon.ico",
       "signtoolOptions": null
+    },
+    "portable": {
+      "artifactName": "${productName} Portable ${version}.${ext}"
     },
     "nsis": {
       "oneClick": false,
@@ -56,11 +81,15 @@
       "target": [
         {
           "target": "dmg",
-          "arch": ["universal"]
+          "arch": [
+            "universal"
+          ]
         },
         {
           "target": "zip",
-          "arch": ["universal"]
+          "arch": [
+            "universal"
+          ]
         }
       ],
       "icon": "assets/icon.icns",
@@ -75,8 +104,16 @@
       "title": "neisme Calendar ${version}",
       "icon": "assets/icon.icns",
       "contents": [
-        { "x": 130, "y": 220 },
-        { "x": 410, "y": 220, "type": "link", "path": "/Applications" }
+        {
+          "x": 130,
+          "y": 220
+        },
+        {
+          "x": 410,
+          "y": 220,
+          "type": "link",
+          "path": "/Applications"
+        }
       ],
       "window": {
         "width": 540,

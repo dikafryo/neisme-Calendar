@@ -3,6 +3,11 @@
 const { app, BrowserWindow, Tray, Menu, ipcMain, screen, nativeImage, shell, Notification, globalShortcut } = require('electron');
 const path = require('path');
 const Store = require('electron-store');
+
+// 포터블 실행 시 데이터를 exe 옆 data/ 폴더에 저장 (USB 등 이식성 확보)
+if (process.env.PORTABLE_EXECUTABLE_DIR) {
+  app.setPath('userData', path.join(process.env.PORTABLE_EXECUTABLE_DIR, 'data'));
+}
 const googleAuth = require('./sync/google-auth');
 const nextcloudAuth = require('./sync/nextcloud-auth');
 
@@ -23,6 +28,8 @@ const store = new Store({
 let mainWindow = null;
 let tray = null;
 let isQuitting = false;
+// 🆕 v26.0728.1 스티커 메모 창들 (memoId → BrowserWindow)
+const stickyWindows = new Map();
 // 모듈 레벨 함수: createTray에서 정의되고 createWindow의 show/hide 핸들러에서 호출됨
 let refreshTrayMenu = () => {};
 
@@ -140,6 +147,68 @@ function saveBounds() {
   if (mainWindow && !mainWindow.isDestroyed()) {
     store.set('bounds', mainWindow.getBounds());
   }
+}
+
+// ─────────────────────────────────────────────
+// 🆕 v26.0728.1 스티커 메모 (메모 카드 더블클릭 → 바탕화면에 독립 창으로)
+// ─────────────────────────────────────────────
+
+// 새 스티커 창의 기본 위치 — 이미 떠있는 개수만큼 계단식으로 어긋나게
+function cascadeStickyPosition() {
+  const display = screen.getPrimaryDisplay();
+  const base = { x: display.workArea.x + 80, y: display.workArea.y + 80 };
+  const n = stickyWindows.size % 8;
+  return { x: base.x + n * 26, y: base.y + n * 26 };
+}
+
+function createStickyWindow(memoId) {
+  const existing = stickyWindows.get(memoId);
+  if (existing && !existing.isDestroyed()) {
+    existing.show();
+    existing.focus();
+    return;
+  }
+
+  const savedBounds = (store.get('stickyNotes') || {})[memoId];
+  const bounds = savedBounds || { ...cascadeStickyPosition(), width: 220, height: 220 };
+
+  const win = new BrowserWindow({
+    ...bounds,
+    minWidth: 160,
+    minHeight: 160,
+    frame: false,
+    transparent: true,
+    backgroundColor: '#00000000',
+    resizable: true,
+    alwaysOnTop: true,
+    skipTaskbar: false,
+    hasShadow: false,   // 그림자는 CSS box-shadow로 (둥근 모서리 밖으로 각진 그림자 안 나오게)
+    show: false,
+    icon: path.join(__dirname, 'assets', 'icon.ico'),
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false
+    }
+  });
+
+  win.setAlwaysOnTop(true, 'floating');
+  win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  win.loadFile(path.join(__dirname, 'renderer', 'sticky.html'), { query: { id: memoId } });
+  win.once('ready-to-show', () => win.show());
+
+  const persistBounds = () => {
+    if (win.isDestroyed()) return;
+    const all = store.get('stickyNotes') || {};
+    all[memoId] = win.getBounds();
+    store.set('stickyNotes', all);
+  };
+  win.on('moved', persistBounds);
+  win.on('resized', persistBounds);
+  win.on('closed', () => stickyWindows.delete(memoId));
+
+  stickyWindows.set(memoId, win);
 }
 
 // ─────────────────────────────────────────────
@@ -428,7 +497,26 @@ function setupIPC() {
   ipcMain.handle('store-get', (e, key) => store.get(key));
   ipcMain.handle('store-set', (e, key, value) => {
     store.set(key, value);
+    // 🆕 v26.0728.1 메모가 바뀌면 (메인 위젯이든 스티커 창이든) 나머지 창들에 알림
+    // — 보낸 창 자신은 이미 최신 상태이므로 제외
+    if (key === 'cal_memos_v4') {
+      const senderId = e.sender.id;
+      BrowserWindow.getAllWindows().forEach(w => {
+        if (!w.isDestroyed() && w.webContents.id !== senderId) {
+          w.webContents.send('memo-store-changed');
+        }
+      });
+    }
     return true;
+  });
+
+  // 🆕 v26.0728.1 스티커 메모 창 열기/닫기
+  ipcMain.handle('open-sticky-note', (e, memoId) => {
+    createStickyWindow(memoId);
+  });
+  ipcMain.handle('close-sticky-note', (e, memoId) => {
+    const w = stickyWindows.get(memoId);
+    if (w && !w.isDestroyed()) w.close();
   });
 
   ipcMain.handle('app-quit', () => {

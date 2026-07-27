@@ -787,13 +787,18 @@ function renderMemos() {
   memos.sort((a, b) => Number(a.completed) - Number(b.completed));
 
   // ── HTML 만들기 ──
-  // contenteditable로 텍스트를 인라인 편집 가능하게 함
+  // 🆕 v26.0728.1 포스트잇 스타일 정사각형 카드 그리드.
+  // 카드 안 텍스트는 미리보기만 (line-clamp) — 실제 편집은 더블클릭으로 여는
+  // 스티커 메모 창(sticky.html, 바탕화면 독립 창)에서 한다.
+  // 색은 sticky-colors.js의 stickyColorFor(id)로 계산 — sticky 창과 항상 동일한 색.
   list.innerHTML = memos.map(m => `
-    <div class="memo-item ${m.completed ? 'completed' : ''}" data-id="${m.id}">
-      <div class="memo-checkbox"></div>
-      <div class="memo-text" contenteditable="true" spellcheck="false">${escapeHtml(m.text)}</div>
-      <span class="memo-source-badge ${m.source}">${m.source === 'gtasks' ? 'G' : 'L'}</span>
-      <button class="memo-delete">✕</button>
+    <div class="memo-item ${m.completed ? 'completed' : ''}" data-id="${m.id}" style="--sticky-bg:${stickyColorFor(m.id)}" title="더블클릭 → 스티커로 열기">
+      <div class="memo-card-top">
+        <div class="memo-checkbox"></div>
+        <span class="memo-source-badge ${m.source}">${m.source === 'gtasks' ? 'G' : 'L'}</span>
+      </div>
+      <div class="memo-text">${escapeHtml(m.text)}</div>
+      <button class="memo-delete" title="삭제">✕</button>
     </div>
   `).join('');
 
@@ -802,7 +807,8 @@ function renderMemos() {
     const id = el.dataset.id;
 
     // 체크박스 클릭 → 완료 상태 토글 + Google Tasks에 push
-    el.querySelector('.memo-checkbox').addEventListener('click', async () => {
+    el.querySelector('.memo-checkbox').addEventListener('click', async (e) => {
+      e.stopPropagation();
       const m = state.memos.find(x => x.id === id);
       if (!m) return;
       m.completed = !m.completed;
@@ -815,7 +821,7 @@ function renderMemos() {
       renderMemos();
     });
 
-    // ✕ 버튼 → 삭제 (Google이면 서버에서도 삭제)
+    // ✕ 버튼 → 삭제 (Google이면 서버에서도 삭제, 열려있는 스티커 창도 같이 닫음)
     el.querySelector('.memo-delete').addEventListener('click', async (e) => {
       e.stopPropagation();
       const m = state.memos.find(x => x.id === id);
@@ -825,25 +831,12 @@ function renderMemos() {
       state.memos = state.memos.filter(x => x.id !== id);
       await saveMemos();
       renderMemos();
+      if (isElectron) window.electronAPI.closeStickyNote(id);
     });
 
-    // 텍스트 인라인 편집 → blur(포커스 잃을 때) 시 저장 + push
-    const textEl = el.querySelector('.memo-text');
-    textEl.addEventListener('blur', async () => {
-      const m = state.memos.find(x => x.id === id);
-      if (m && textEl.textContent.trim() && m.text !== textEl.textContent.trim()) {
-        m.text = textEl.textContent.trim();
-        if (m.source === 'gtasks' && m.googleId && isElectron) {
-          const r = await window.electronAPI.pushGoogleTask(m);
-          if (r.ok) Object.assign(m, r.task);
-        }
-        await saveMemos();
-      }
-    });
-
-    // Enter 키로 편집 종료 (줄바꿈 막고 blur 발동)
-    textEl.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') { e.preventDefault(); textEl.blur(); }
+    // 🆕 v26.0728.1 더블클릭 → 바탕화면에 스티커 메모 창으로 열기 (거기서 편집)
+    el.addEventListener('dblclick', () => {
+      if (isElectron) window.electronAPI.openStickyNote(id);
     });
   });
 }
@@ -1130,37 +1123,35 @@ function calDisplayName(c, source) {
  * 🆕 v26.5.9f 새 일정의 "전체 기본 저장 위치" 헬퍼.
  *
  * state.defaultTarget = { source: 'local'|'google'|'nextcloud', id: string|null } | null
- *   - local 은 id 무시
+ *   - local: id = categoryId, 또는 null이면 "(분류 없음)"  🆕 v26.0728.1
  *   - google: id = googleCalendarId
  *   - nextcloud: id = ncCalendarUrl
  *
- * 주황 별표 UI 가 토글하는 단일 진실 — 한 군데(소스/캘린더)만 active.
+ * 주황 별표(★) UI 가 토글하는 단일 진실 — 한 군데(소스/캘린더/카테고리)만 active.
+ * ⭐ 노란 별(각 소스의 대표 캘린더, isPrimary)과는 별개 — 혼동 주의.
  */
 function isDefaultTarget(source, id) {
   const t = state.defaultTarget;
   if (!t || t.source !== source) return false;
-  if (source === 'local') return true;
-  return t.id === id;
+  return (t.id || null) === (id || null);
 }
 async function setDefaultTarget(source, id) {
-  if (!source) {
-    state.defaultTarget = null;
-  } else if (source === 'local') {
-    state.defaultTarget = { source: 'local', id: null };
-  } else {
-    state.defaultTarget = { source, id: id || null };
-  }
+  state.defaultTarget = source ? { source, id: id || null } : null;
   await saveSettings();
   renderDefaultTargetLabel();   // 설정 패널 라벨 갱신
 }
 /**
- * 🆕 v26.5.9f 현재 default 가 살아있는 캘린더를 가리키는지 검증.
- * (선택 해제된 캘린더가 default 로 박혀있으면 무의미 — null 취급)
+ * 🆕 v26.5.9f 현재 default 가 살아있는 캘린더(또는 카테고리)를 가리키는지 검증.
+ * (선택 해제된 캘린더나 삭제된 카테고리가 default 로 박혀있으면 무의미 — null 취급)
  */
 function resolveDefaultTarget() {
   const t = state.defaultTarget;
   if (!t) return null;
-  if (t.source === 'local') return { source: 'local', id: null };
+  if (t.source === 'local') {
+    if (!t.id) return { source: 'local', id: null };   // (분류 없음) — 항상 유효
+    const ok = (state.categories || []).some(c => c.id === t.id);
+    return ok ? { source: 'local', id: t.id } : null;
+  }
   if (t.source === 'google') {
     const ok = (state.googleSelectedCalendars || []).some(c => c.id === t.id);
     return ok ? { source: 'google', id: t.id } : null;
@@ -1173,28 +1164,23 @@ function resolveDefaultTarget() {
 }
 /**
  * 🆕 v26.5.9f 설정 패널의 "현재 기본" 라벨 갱신.
- * defaultTarget 이 어떤 source/캘린더를 가리키는지 한 줄로.
+ * defaultTarget 이 어떤 source/캘린더/카테고리를 가리키는지 한 줄로.
  */
 function renderDefaultTargetLabel() {
   const lbl = document.getElementById('defaultTargetLabel');
-  const localBtn = document.getElementById('defaultTargetLocalBtn');
   if (!lbl) return;
   const r = resolveDefaultTarget();
   if (!r) {
     lbl.textContent = '(미설정 — Google 우선)';
   } else if (r.source === 'local') {
-    lbl.textContent = '로컬';
+    const cat = categoryById(r.id);
+    lbl.textContent = `로컬 · ${cat ? cat.name : '(분류 없음)'}`;
   } else if (r.source === 'google') {
     const c = (state.googleSelectedCalendars || []).find(x => x.id === r.id);
     lbl.textContent = `Google · ${c ? calDisplayName(c, 'google') : r.id}`;
   } else if (r.source === 'nextcloud') {
     const c = (state.nextcloudSelectedCalendars || []).find(x => x.url === r.id);
     lbl.textContent = `NextCloud · ${c ? calDisplayName(c, 'nextcloud') : r.id}`;
-  }
-  if (localBtn) {
-    const isLocal = r && r.source === 'local';
-    localBtn.classList.toggle('active', !!isLocal);
-    localBtn.textContent = isLocal ? '★' : '☆';
   }
 }
 
@@ -1978,8 +1964,8 @@ function openEventModal(event, defaultDate) {
       document.getElementById('evSource').value = state.googleAuthenticated ? 'google' : 'local';
     }
     document.getElementById('evMemo').value   = '';
-    // 🆕 v26.7.22 카테고리 초기화 (분류 없음)
-    fillCategorySelect('');
+    // 🆕 v26.0728.1 카테고리 초기화 — defaultTarget 이 로컬+특정 카테고리를 가리키면 그걸로, 아니면 분류 없음
+    fillCategorySelect(_dt && _dt.source === 'local' && _dt.id ? _dt.id : '');
 
     // 🆕 v26.5.8a 반복 폼 초기화
     fillRecurrenceForm('');
@@ -3434,9 +3420,10 @@ async function refreshGoogleAuthStatus() {
 
     if (state.googleAuthenticated && state.googleEmail) {
       const count = state.googleSelectedCalendars.length;
-      btn.textContent = count > 0 ? '연결됨' : '캘린더 선택';
+      // 🆕 v26.0728.1 "연결됨"(상태 표시처럼 읽힘) → "동기화 설정"(클릭 가능함이 드러나게)
+      btn.textContent = count > 0 ? '동기화 설정' : '캘린더 선택';
       btn.classList.add('connected');
-      btn.title = `${state.googleEmail}\n캘린더 ${count}개 선택됨\n클릭하여 캘린더 관리`;
+      btn.title = `${state.googleEmail}\n캘린더 ${count}개 선택됨\n클릭하여 캘린더/기본 위치 설정`;
       emailEl.textContent = count > 0
         ? `${state.googleEmail} · 캘린더 ${count}개`
         : `${state.googleEmail} (캘린더 미선택)`;
@@ -3492,9 +3479,10 @@ async function refreshNextcloudAuthStatus() {
 
     if (state.nextcloudAuthenticated) {
       const count = state.nextcloudSelectedCalendars.length;
-      btn.textContent = '연결됨';
+      // 🆕 v26.0728.1 "연결됨"(상태 표시처럼 읽힘) → "동기화 설정"(클릭 가능함이 드러나게)
+      btn.textContent = '동기화 설정';
       btn.classList.add('connected');
-      btn.title = `${status.username} @ ${status.serverUrl}\n캘린더 ${count}개 선택됨\n클릭하여 캘린더 관리`;
+      btn.title = `${status.username} @ ${status.serverUrl}\n캘린더 ${count}개 선택됨\n클릭하여 캘린더/기본 위치 설정`;
       lbl.textContent = `${status.username} · 캘린더 ${count}개`;
       lbl.classList.remove('disconnected');
     } else if (status.authenticated) {
@@ -4191,14 +4179,6 @@ document.querySelectorAll('.theme-btn').forEach(btn => {
   });
 });
 
-// 🆕 v26.5.9f 새 일정 기본 위치 — 로컬 토글.
-// 클릭 시 defaultTarget 이 로컬이면 해제(null), 아니면 로컬로 설정.
-document.getElementById('defaultTargetLocalBtn')?.addEventListener('click', async () => {
-  const t = state.defaultTarget;
-  const isLocal = t && t.source === 'local';
-  await setDefaultTarget(isLocal ? null : 'local', null);
-});
-
 
 // ─── 잠금 토글 체크박스 ───
 document.getElementById('lockToggle').addEventListener('change', async e => {
@@ -4563,19 +4543,35 @@ function addCategoryRow() {
  * 카테고리 목록 다시 그리기.
  * 이름 input 은 재렌더 시 포커스가 날아가므로 input 이벤트에선 draft 만 갱신하고
  * 재렌더하지 않음 (색상 피커도 동일). 삭제/추가만 재렌더.
+ * 🆕 v26.0728.1 맨 위에 "(분류 없음)" 고정 행을 항상 보여주고, 각 행에
+ * ★ 기본 위치 별을 달아서 — 새 일정 기본 위치를 로컬 카테고리 단위로 지정할 수 있게 함.
  */
 function renderCatList() {
   const list = document.getElementById('catList');
 
+  // ── "(분류 없음)" 고정 행 — 카테고리가 하나도 없어도 항상 표시 ──
+  const noneIsDefault = isDefaultTarget('local', null);
+  let html = `
+    <div class="cal-select-item cat-none-row">
+      <span class="cat-none-swatch" title="분류 없음"></span>
+      <span class="cat-none-label">(분류 없음)</span>
+      <button class="cal-default-star cat-none-star ${noneIsDefault ? 'active' : ''}" title="새 일정의 전체 기본 위치로 지정">
+        ${noneIsDefault ? '★' : '☆'}
+      </button>
+    </div>
+  `;
+
   if (catDraft.length === 0) {
-    list.innerHTML = '<div class="cal-select-empty">' +
+    html += '<div class="cal-select-empty">' +
       '카테고리가 없습니다 — 모든 로컬 일정이 <b>(분류 없음)</b> 으로 저장됩니다.<br>' +
       '아래 <b>＋ 카테고리 추가</b> 로 이름과 색을 직접 만드세요.' +
       '</div>';
+    list.innerHTML = html;
+    wireCatNoneStar(list);
     return;
   }
 
-  list.innerHTML = catDraft.map((c, i) => {
+  html += catDraft.map((c, i) => {
     // 같은 이름의 원격 캘린더가 선택돼 있으면 "연동됨" 뱃지
     const linked = [];
     if (state.googleAuthenticated    && findCalendarByName('google', c.name))    linked.push('G');
@@ -4583,16 +4579,23 @@ function renderCatList() {
     const badge = linked.length
       ? `<span class="cat-link-badge linked" title="같은 이름의 원격 캘린더와 연동됨">🔗 ${linked.join('·')}</span>`
       : `<span class="cat-link-badge unlinked" title="같은 이름의 원격 캘린더 없음 (로컬 전용)">로컬</span>`;
+    const isDefault = isDefaultTarget('local', c.id);
 
     return `
     <div class="cal-select-item" data-idx="${i}">
       <input type="color" class="cal-color-input" value="${escapeHtml(c.color)}" title="클릭하여 색상 변경">
       <input type="text" class="cat-name-input" value="${escapeHtml(c.name)}" placeholder="카테고리 이름" maxlength="24">
       ${badge}
+      <button class="cal-default-star" title="새 일정의 전체 기본 위치로 지정 (먼저 저장 필요)">
+        ${isDefault ? '★' : '☆'}
+      </button>
       <button class="cat-delete" title="삭제">✕</button>
     </div>
   `;
   }).join('');
+
+  list.innerHTML = html;
+  wireCatNoneStar(list);
 
   // 색상 변경 — draft 만 갱신 (재렌더 X, 피커 포커스 보존)
   list.querySelectorAll('.cal-color-input').forEach(inp => {
@@ -4612,6 +4615,20 @@ function renderCatList() {
     inp.addEventListener('blur', () => renderCatList());
   });
 
+  // 🆕 v26.0728.1 ★ 기본 위치 — state.categories 에 이미 저장된 카테고리에만 적용 가능
+  // (방금 만든 미저장 행은 아직 categoryId 가 실체가 없어 defaultTarget 이 가리킬 수 없음)
+  list.querySelectorAll('.cal-select-item[data-idx] .cal-default-star').forEach(star => {
+    star.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const i = parseInt(star.closest('.cal-select-item').dataset.idx, 10);
+      const cat = catDraft[i];
+      if (!categoryById(cat.id)) { toast('먼저 저장한 뒤 기본 위치로 지정할 수 있어요'); return; }
+      const wasDefault = isDefaultTarget('local', cat.id);
+      await setDefaultTarget(wasDefault ? null : 'local', wasDefault ? null : cat.id);
+      renderCatList();
+    });
+  });
+
   // 삭제
   list.querySelectorAll('.cat-delete').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -4625,6 +4642,18 @@ function renderCatList() {
       catDraft.splice(i, 1);
       renderCatList();
     });
+  });
+}
+
+/** 🆕 v26.0728.1 "(분류 없음)" 고정 행의 ★ 기본 위치 별 클릭 처리 */
+function wireCatNoneStar(list) {
+  const btn = list.querySelector('.cat-none-star');
+  if (!btn) return;
+  btn.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    const wasDefault = isDefaultTarget('local', null);
+    await setDefaultTarget(wasDefault ? null : 'local', null);
+    renderCatList();
   });
 }
 
@@ -4669,6 +4698,7 @@ document.getElementById('catSave').addEventListener('click', async () => {
   closeCategoryModal();
   renderCategorySummary();
   renderCalendar();   // 색상 즉시 반영
+  renderDefaultTargetLabel();   // 🆕 v26.0728.1 카테고리 이름 변경/삭제가 기본 위치 라벨에 반영되게
 
   // 🆕 v26.7.22 일정 모달이 아직 떠있으면 드롭다운을 새 목록으로 갱신.
   //   여기서 방금 만든 카테고리가 있으면 그걸 바로 선택해준다.
@@ -5480,6 +5510,12 @@ if (isElectron) {
   // 동기화 상태 메시지 (현재는 사용 안 하지만 향후 확장용)
   window.electronAPI.onSyncStatus((status) => {
     if (status.message) toast(status.message);
+  });
+
+  // 🆕 v26.0728.1 스티커 메모 창에서 메모를 편집/삭제하면 메인 위젯도 다시 그림
+  window.electronAPI.onMemoStoreChanged?.(async () => {
+    state.memos = (await loadJSON('cal_memos_v4')) || [];
+    renderMemos();
   });
 
   // 창이 숨겨질 때 패널들 정리

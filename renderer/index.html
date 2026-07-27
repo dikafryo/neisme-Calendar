@@ -75,7 +75,8 @@
   <!-- ┌─────────────────────────────────────────────────────────────────┐
        │  ④ 메모 / 할 일 패널 (캘린더 아래 노란색 박스)                     │
        │  - 헤더: "📝 메모/할 일" + [전체/진행중/Tasks] 탭                  │
-       │  - 리스트: 체크박스가 달린 메모 항목들                             │
+       │  - 리스트: 🆕 v26.0728.1 정사각형 포스트잇 카드 그리드              │
+       │    (체크박스로 완료 토글, ✕로 삭제, 더블클릭 → 바탕화면 스티커 창)   │
        │  - 입력창: 새 메모 추가 (Enter로 저장)                            │
        └─────────────────────────────────────────────────────────────────┘ -->
   <div class="memo-panel">
@@ -97,14 +98,18 @@
        ║  ⑤ 설정 패널                                                       ║
        ║                                                                    ║
        ║  ⚙ 톱니바퀴 버튼을 누르면 우상단에 떠오르는 박스.                    ║
-       ║  - 레이아웃 (균일/가로압축/세로분할)                                 ║
-       ║  - 표시 (투명도, 폰트크기)                                          ║
-       ║  - 동기화 (잠금, 항상 위, 계정 연결: Google / NextCloud)            ║
+       ║  🆕 v26.7.22b 2열 레이아웃 (항목이 늘어나 한 줄로는 복잡해져서 분리) ║
+       ║  - 좌: 레이아웃 / 표시(테마·투명도·폰트) / 카테고리 / 창 동작        ║
+       ║  - 우: 동기화 (계정 연결: Google / NextCloud + 새 일정 기본 위치)   ║
        ║                                                                    ║
        ║  ★★★ NextCloud 연동에서 수정한 곳: 이 패널 안의 "NextCloud" 행 ★★★  ║
        ║       (아래 settings-account 두 번째 항목)                          ║
        ╚══════════════════════════════════════════════════════════════════╝ -->
   <div class="settings-panel" id="settingsPanel">
+   <div class="settings-columns">
+
+    <!-- ══════════════════ 좌측 열: 앱 표시 / 창 동작 ══════════════════ -->
+    <div class="settings-col">
 
     <!-- ── 레이아웃 카드 3종 (🆕 v26.5.8i 균일 / 주말 압축 / 주간 일정) ── -->
     <h4>📐 레이아웃</h4>
@@ -174,8 +179,8 @@
 
     <div class="settings-divider"></div>
 
-    <!-- ── 동기화 섹션 헤더 (클릭하면 즉시 동기화) ── -->
-    <h4 id="syncHeader" class="clickable-header" title="클릭하여 지금 동기화">🔄 동기화</h4>
+    <!-- ── 창 동작 (잠금 / 항상 위 / 항상 뒤) ── -->
+    <h4>🪟 창 동작</h4>
 
     <!-- 창 잠금 토글 -->
     <div class="settings-row">
@@ -194,6 +199,16 @@
       <span>항상 뒤에 표시</span>
       <input type="checkbox" id="alwaysAtBottomToggle">
     </div>
+
+    </div><!-- /settings-col (좌) -->
+
+    <div class="settings-col-divider"></div>
+
+    <!-- ══════════════════ 우측 열: 동기화 / 계정 연결 ══════════════════ -->
+    <div class="settings-col">
+
+    <!-- ── 동기화 섹션 헤더 (클릭하면 즉시 동기화) ── -->
+    <h4 id="syncHeader" class="clickable-header" title="클릭하여 지금 동기화">🔄 동기화</h4>
 
     <!-- ── Google 계정 연결 행 ── -->
     <div class="settings-row settings-account">
@@ -226,21 +241,29 @@
       </div>
     </div>
 
+    <div class="settings-divider"></div>
+
     <!-- 🆕 v26.5.9f 새 일정 기본 저장 위치 (3개 source 통합).
-         - 주황 별표는 Google/NextCloud 모달에서 지정.
-         - 로컬은 모달이 없으므로 여기 토글로.
-         - 라벨 = 현재 어디로 가는지 한 줄 요약. -->
+         🆕 v26.0728.1 여기서 직접 지정하는 컨트롤은 제거 — 별표는 각자의 관리 화면에서:
+         - Google/NextCloud: 위 "동기화 설정" 모달의 캘린더 목록에서 ★
+         - 로컬: "카테고리 관리" 모달의 (분류 없음) 또는 각 카테고리 행의 ★
+         여기서는 지금 어디로 가는지 한 줄 요약만 보여줌. -->
+    <h4>➕ 새 일정 기본 위치</h4>
+    <p class="settings-hint">
+      일정을 새로 추가할 때 <b>저장 위치가 자동으로 선택</b>되는 곳이에요.
+      Google/NextCloud는 <b>동기화 설정</b> 모달에서, 로컬은 <b>카테고리 관리</b> 모달에서
+      캘린더/카테고리 옆의 <span class="hint-star">☆→★</span> 를 눌러 지정하세요.
+    </p>
     <div class="settings-row default-target-row">
       <div class="account-info">
-        <span class="account-name">새 일정 기본 위치</span>
+        <span class="account-name">현재 기본 위치</span>
         <span class="account-email" id="defaultTargetLabel">(미설정 — Google 우선)</span>
-      </div>
-      <div class="account-controls">
-        <button class="cal-default-star" id="defaultTargetLocalBtn" title="로컬을 새 일정 기본 위치로 지정">☆</button>
-        <span style="font-size:11px;opacity:0.7;margin-left:4px">로컬</span>
       </div>
     </div>
 
+    </div><!-- /settings-col (우) -->
+
+   </div><!-- /settings-columns -->
   </div><!-- /settings-panel -->
 
 </div><!-- /widget -->
@@ -488,8 +511,11 @@
     <!-- ── Step 2: 캘린더 선택 (Step1 성공 후 표시, 멀티셀렉) ── -->
     <div id="ncStep2" style="display:none">
       <h3>동기화할 캘린더 선택</h3>
+      <!-- 🆕 v26.0728.1 별 2종 설명 — ⭐(계정 대표)과 ★(전체 기본 위치)를 혼동하기 쉬워 명시 -->
       <p class="cal-select-hint">
-        체크 = 동기화에 포함 · ⭐ 클릭 = 새 일정의 기본 저장 위치 (1개만)
+        체크 = 동기화에 포함<br>
+        <b>⭐ 노란 별</b> = 이 계정에서 대표로 쓸 캘린더 (1개)<br>
+        <b>★ 주황 별</b> = 새 일정 추가 시 자동 선택되는 전체 기본 위치 (로컬·Google·NextCloud 통합 1곳)
       </p>
 
       <!-- app.js가 체크박스+별 항목 리스트로 채워줌 -->
@@ -517,8 +543,11 @@
 <div class="modal-bg" id="gcalModalBg">
   <div class="modal">
     <h3>Google 캘린더 선택</h3>
+    <!-- 🆕 v26.0728.1 별 2종 설명 -->
     <p class="cal-select-hint">
-      체크 = 동기화에 포함 · ⭐ 클릭 = 새 일정의 기본 저장 위치 (1개만)
+      체크 = 동기화에 포함<br>
+      <b>⭐ 노란 별</b> = 이 계정에서 대표로 쓸 캘린더 (1개)<br>
+      <b>★ 주황 별</b> = 새 일정 추가 시 자동 선택되는 전체 기본 위치 (로컬·Google·NextCloud 통합 1곳)
     </p>
 
     <div id="gcalList" class="cal-select-list"></div>
@@ -543,8 +572,11 @@
 <div class="modal-bg" id="ncManageModalBg">
   <div class="modal">
     <h3>NextCloud 캘린더 선택</h3>
+    <!-- 🆕 v26.0728.1 별 2종 설명 -->
     <p class="cal-select-hint">
-      체크 = 동기화에 포함 · ⭐ 클릭 = 새 일정의 기본 저장 위치 (1개만)
+      체크 = 동기화에 포함<br>
+      <b>⭐ 노란 별</b> = 이 계정에서 대표로 쓸 캘린더 (1개)<br>
+      <b>★ 주황 별</b> = 새 일정 추가 시 자동 선택되는 전체 기본 위치 (로컬·Google·NextCloud 통합 1곳)
     </p>
 
     <div id="ncManageList" class="cal-select-list"></div>
@@ -562,11 +594,13 @@
 
 <!-- ╔════════════════════════════════════════════════════════════════════╗
      ║  🆕 v26.7.22 카테고리 관리 모달 (로컬 일정용 "내 캘린더")               ║
+     ║  🆕 v26.0728.1 "(분류 없음)" 고정 행 + 각 행 ★ 기본 위치 지정 추가       ║
      ║                                                                      ║
      ║  설정 패널의 "로컬 카테고리 → 관리" 버튼으로 열림.                     ║
      ║  - 색상 피커 + 이름 입력 + 삭제                                        ║
      ║  - 각 행 우측에 Google/NextCloud 연동 상태 뱃지                        ║
      ║    (같은 이름의 원격 캘린더가 선택돼 있으면 "연동됨")                   ║
+     ║  - ★ 별 = 새 일정의 전체 기본 위치로 이 카테고리(또는 분류 없음) 지정   ║
      ╚════════════════════════════════════════════════════════════════════╝ -->
 <div class="modal-bg" id="catModalBg">
   <div class="modal">
@@ -574,7 +608,8 @@
     <p class="cal-select-hint">
       로컬 일정을 분류하는 <b>내 캘린더</b>입니다. 이름과 색을 직접 정하세요.<br>
       카테고리와 <b>같은 이름</b>의 Google · NextCloud 캘린더가 있으면,
-      저장 위치를 원격으로 바꿀 때 그 캘린더가 자동 선택되어 분류가 유지됩니다.
+      저장 위치를 원격으로 바꿀 때 그 캘린더가 자동 선택되어 분류가 유지됩니다.<br>
+      <b>★ 주황 별</b> = 새 일정 추가 시 자동 선택되는 전체 기본 위치로 지정.
     </p>
 
     <div id="catList" class="cal-select-list"></div>
@@ -607,6 +642,8 @@
 
 
 <!-- 메인 스크립트 -->
+<!-- 🆕 v26.0728.1 메모 그리드 카드 색상 — sticky.html과 공유 -->
+<script src="sticky-colors.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

@@ -535,7 +535,7 @@ body {
     4px 4px 10px rgba(var(--shadow-color), 0.4),
     -3px -3px 6px rgba(255, 255, 255, 0.95),
     inset 0 1px 0 rgba(255, 255, 255, 0.6);
-  max-height: 200px;
+  max-height: 240px;   /* 🆕 v26.0728.1 포스트잇 그리드가 최소 2줄은 보이게 살짝 확대 (200→240) */
   display: flex;
   flex-direction: column;
 }
@@ -591,76 +591,111 @@ body {
   overflow-y: auto;
   margin-bottom: 8px;
   min-height: 0;
+  /* 🆕 v26.0728.1 포스트잇처럼 정사각형 카드 그리드로 배치 (기존 세로 리스트 대체) */
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+  grid-auto-rows: 1fr;
+  align-content: start;
+  gap: 8px;
+  padding: 2px;
 }
 .memo-list::-webkit-scrollbar { width: 4px; }
 .memo-list::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 2px; }
 
+/* 🆕 v26.0728.1 메모 카드 = 정사각형 포스트잇.
+ * 배경색은 렌더링 시 --sticky-bg 인라인 변수로 지정 (sticky-colors.js, id 해시 기반).
+ * 텍스트는 미리보기만 — 실제 편집은 더블클릭으로 여는 스티커 창(sticky.html)에서. */
 .memo-item {
+  position: relative;
+  aspect-ratio: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 6px 7px 4px;
+  border-radius: 3px 3px 12px 3px;
+  background: var(--sticky-bg, #fff6b7);
+  box-shadow:
+    2px 3px 6px rgba(0, 0, 0, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  cursor: pointer;
+  transition: transform 0.12s, box-shadow 0.12s;
+}
+.memo-item:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    2px 6px 12px rgba(0, 0, 0, 0.26),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+.memo-item.completed { opacity: 0.55; }
+.memo-card-top {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 4px 2px;
-  font-size: calc(var(--base-fs) * 0.95);
-  color: var(--text-memo-item);
-  /* 🆕 v26.5.9a 텍스트 헤일로 — 패널 bg 가 투명해져도 또렷 (테마별 분기) */
-  text-shadow:
-    0 0 3px var(--halo-1),
-    0 1px 2px var(--halo-2);
-}
-.memo-item.completed .memo-text {
-  text-decoration: line-through;
-  opacity: 0.5;
+  justify-content: space-between;
+  flex-shrink: 0;
+  margin-bottom: 3px;
 }
 .memo-checkbox {
-  width: 14px;
-  height: 14px;
-  border: 1.5px solid #b8975a;
+  width: 13px;
+  height: 13px;
+  border: 1.5px solid rgba(0, 0, 0, 0.35);
   border-radius: 4px;
   cursor: pointer;
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--memo-checkbox-bg);
-  box-shadow: inset 1px 1px 2px rgba(0,0,0,0.1);
+  background: rgba(255, 255, 255, 0.55);
 }
 .memo-item.completed .memo-checkbox {
-  background: linear-gradient(145deg, #f4d35e, #e8b923);
-  border-color: #b8975a;
+  background: rgba(0, 0, 0, 0.55);
+  border-color: rgba(0, 0, 0, 0.55);
 }
 .memo-item.completed .memo-checkbox::after {
   content: '✓';
   color: white;
-  font-size: 10px;
+  font-size: 9px;
   font-weight: bold;
 }
-.memo-text { flex: 1; cursor: text; word-break: break-word; }
-.memo-text[contenteditable="true"]:focus {
-  outline: none;
-  background: var(--input-bg);
-  color: var(--input-fg);
-  border-radius: 3px;
-  padding: 0 4px;
+.memo-text {
+  flex: 1;
+  font-size: calc(var(--base-fs) * 0.82);
+  line-height: 1.25;
+  color: rgba(0, 0, 0, 0.78);
+  word-break: break-word;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
 }
+.memo-item.completed .memo-text { text-decoration: line-through; }
 .memo-source-badge {
-  font-size: calc(var(--base-fs) * 0.78);
-  padding: 1px 5px;
-  border-radius: 3px;
+  font-size: 8px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
   color: white;
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
 }
 .memo-source-badge.gtasks { background: #1a73e8; }
 .memo-source-badge.local { background: #6c757d; }
 .memo-delete {
+  position: absolute;
+  bottom: 3px;
+  right: 5px;
   border: none;
   background: transparent;
   cursor: pointer;
-  color: #999;
-  font-size: 12px;
+  color: rgba(0, 0, 0, 0.4);
+  font-size: 11px;
   opacity: 0;
+  padding: 2px;
+  transition: opacity 0.12s;
 }
 .memo-item:hover .memo-delete { opacity: 1; }
-.memo-delete:hover { color: var(--text-sun); }
+.memo-delete:hover { color: #c0392b; }
 .memo-add-form { display: flex; gap: 6px; flex-shrink: 0; }
 .memo-add-input {
   flex: 1;
@@ -684,6 +719,7 @@ body {
 }
 .memo-add-input:focus { outline: none; border-bottom-color: #e8b923; }
 .memo-empty {
+  grid-column: 1 / -1;   /* 🆕 v26.0728.1 grid 안에서도 전체 폭으로 펼쳐지게 */
   text-align: center;
   color: var(--text-memo-empty);
   font-size: calc(var(--base-fs) * 0.9);
@@ -927,7 +963,8 @@ body {
   border-radius: 10px;
   box-shadow: 0 6px 24px rgba(0,0,0,0.2);
   padding: 14px 16px;
-  width: 320px;
+  width: 640px;
+  max-width: calc(100% - 24px);
   display: none;
   z-index: 100;
   font-size: 12px;
@@ -939,6 +976,39 @@ body {
   color: var(--surface-h);
   text-transform: uppercase;
   letter-spacing: 0.5px;
+}
+
+/* 🆕 v26.7.22b 2열 레이아웃 — 좌: 표시/창 동작, 우: 동기화 */
+.settings-columns {
+  display: flex;
+  align-items: stretch;
+  gap: 16px;
+}
+.settings-col {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.settings-col-divider {
+  width: 1px;
+  flex-shrink: 0;
+  background: var(--surface-divider);
+}
+
+/* 🆕 v26.7.22b 새 일정 기본 위치 안내 문구 (처음 보는 사용자용) */
+.settings-hint {
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: var(--surface-secondary);
+  opacity: 0.85;
+  background: var(--surface-hover-bg, rgba(66,133,244,0.08));
+  border-radius: 6px;
+  padding: 6px 8px;
+  margin: 0 0 9px;
+}
+.settings-hint .hint-star {
+  color: #ffa64d;
+  font-weight: 700;
+  white-space: nowrap;
 }
 .settings-row {
   display: flex;
@@ -1477,6 +1547,21 @@ body {
 #catAdd { color: #4285f4; }
 #catAdd:hover { color: #1a73e8; }
 #catList { overflow-x: hidden; overflow-y: auto; }
+
+/* 🆕 v26.0728.1 "(분류 없음)" 고정 행 — 카테고리가 없어도 기본 위치를 지정할 수 있게 */
+.cat-none-row { background: #fbfbfc; }
+.cat-none-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  border: 1.5px dashed #c0c4c8;
+}
+.cat-none-label {
+  flex: 1 1 auto;
+  color: #888;
+  font-style: italic;
+}
 /* 빈 상태 안내는 두 줄이라 줄간격 확보 */
 #catList .cal-select-empty { line-height: 1.7; padding: 20px 16px; }
 #catList .cal-select-empty b { color: #666; }

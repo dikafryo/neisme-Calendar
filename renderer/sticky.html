@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+
+<!-- 메인 위젯(index.html)과 동일한 CSP -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data:;">
+
+<title>스티커 메모</title>
+<link rel="stylesheet" href="sticky.css">
+</head>
+<body>
+
+<!-- ╔════════════════════════════════════════════════════════════════════╗
+     ║  🆕 v26.0728.1 스티커 메모 창                                        ║
+     ║  - 메모 그리드 카드를 더블클릭하면 뜨는 독립 데스크탑 창.               ║
+     ║  - 창 전체가 드래그 영역(-webkit-app-region: drag), 버튼/텍스트만 예외. ║
+     ║  - id는 main.js가 loadFile 시 쿼리스트링(?id=...)으로 넘겨줌.          ║
+     ╚════════════════════════════════════════════════════════════════════╝ -->
+<div class="sticky-note" id="stickyNote">
+  <div class="sticky-drag-handle">
+    <div class="sticky-checkbox" id="stickyCheckbox" title="완료 체크"></div>
+    <button class="sticky-close" id="stickyClose" title="닫기 (메모는 유지됨)">✕</button>
+  </div>
+  <div class="sticky-text" id="stickyText" contenteditable="true" spellcheck="false"></div>
+  <button class="sticky-delete" id="stickyDelete" title="메모 삭제">🗑</button>
+</div>
+
+<script src="sticky-colors.js"></script>
+<script src="sticky.js"></script>
+</body>
+</html>

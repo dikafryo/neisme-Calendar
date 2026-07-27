@@ -62,6 +62,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   fetchGoogleRange: ({ startISO, endISO }) => ipcRenderer.invoke('fetch-google-range', { startISO, endISO }),
   fetchNextcloudRange: ({ startISO, endISO }) => ipcRenderer.invoke('fetch-nextcloud-range', { startISO, endISO }),
 
+  // ── 🆕 v26.0728.1 스티커 메모 (독립 데스크탑 창) ──
+  openStickyNote: (memoId) => ipcRenderer.invoke('open-sticky-note', memoId),
+  closeStickyNote: (memoId) => ipcRenderer.invoke('close-sticky-note', memoId),
+  onMemoStoreChanged: (callback) => {
+    const handler = () => callback();
+    ipcRenderer.on('memo-store-changed', handler);
+    return () => ipcRenderer.removeListener('memo-store-changed', handler);
+  },
+
   // ── 앱 정보 ──────────────────────────
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),
   

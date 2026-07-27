@@ -1,7 +1,7 @@
 ﻿// sync/google-tasks.js — Google Tasks 양방향 동기화
 // Tasks API는 syncToken이 없어서 updatedMin으로 증분 동기화
 
-const { google } = require('googleapis');
+const { tasks } = require('@googleapis/tasks');
 const Store = require('electron-store');
 const googleAuth = require('./google-auth');
 
@@ -40,7 +40,7 @@ function localToGoogleTask(memo) {
 async function getTasksClient() {
   const auth = googleAuth.getAuthenticatedClient();
   if (!auth) throw new Error('Google에 로그인되어 있지 않습니다');
-  return google.tasks({ version: 'v1', auth });
+  return tasks({ version: 'v1', auth });
 }
 
 // ─────────────────────────────────────────────

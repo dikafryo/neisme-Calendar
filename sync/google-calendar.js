@@ -6,7 +6,7 @@
 //   - 각 이벤트에 googleCalendarId 필드 추가
 //   - push/delete는 이벤트의 googleCalendarId 사용 (없으면 primary)
 
-const { google } = require('googleapis');
+const { calendar } = require('@googleapis/calendar');
 const Store = require('electron-store');
 const googleAuth = require('./google-auth');
 
@@ -124,7 +124,7 @@ function formatTime(d) {
 async function getCalendar() {
   const auth = googleAuth.getAuthenticatedClient();
   if (!auth) throw new Error('Google에 로그인되어 있지 않습니다');
-  return google.calendar({ version: 'v3', auth });
+  return calendar({ version: 'v3', auth });
 }
 
 // ─────────────────────────────────────────────

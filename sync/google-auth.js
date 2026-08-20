@@ -141,7 +141,7 @@ h1{color:#34a853;margin:0 0 12px;font-size:22px}.email{color:#4285f4;font-weight
 .hint{color:#888;font-size:13px;margin-top:24px}</style></head>
 <body><div class="card"><h1>✓ 연결 완료</h1>
 <p><span class="email">${escapeHtml(email)}</span></p>
-<p>Desktop Calendar에 연결되었습니다.</p>
+<p>neisme Calendar에 연결되었습니다.</p>
 <p class="hint">이 창을 닫고 캘린더로 돌아가세요.</p>
 </div></body></html>`;
 }

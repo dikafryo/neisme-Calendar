@@ -954,45 +954,92 @@ body {
   background: var(--surface-hover-bg);
 }
 
-.settings-panel {
-  position: absolute;
-  top: 40px;
-  right: 12px;
-  background: var(--surface-bg);
-  color: var(--surface-fg);
-  border-radius: 10px;
-  box-shadow: 0 6px 24px rgba(0,0,0,0.2);
-  padding: 14px 16px;
-  width: 640px;
-  max-width: calc(100% - 24px);
-  display: none;
-  z-index: 100;
-  font-size: 12px;
-}
-.settings-panel.show { display: block; }
+/* 🆕 v26.0828.1 설정 패널 → 중앙 모달 + 좌측 탭 구조로 개편.
+   #settingsPanel 은 이제 .modal-bg 클래스를 같이 달고 있어 위치/배경/show 토글은
+   .modal-bg 규칙이 담당하고, 여기서는 .settings-panel 클래스로 내부 요소(h4, row 등)
+   글꼴 크기만 계속 지정 (구 코드와의 호환을 위해 클래스명은 유지). */
 .settings-panel h4 {
   font-size: 11px;
-  margin-bottom: 10px;
+  margin: 0 0 10px;
   color: var(--surface-h);
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
 
-/* 🆕 v26.7.22b 2열 레이아웃 — 좌: 표시/창 동작, 우: 동기화 */
-.settings-columns {
+/* 설정 모달 박스 자체 — 폭 넓히고 내부를 [탭 사이드바 | 내용] 2단으로 */
+.modal.settings-modal {
+  width: 620px;
+  max-width: 94vw;
+  padding: 0;
   display: flex;
-  align-items: stretch;
-  gap: 16px;
+  flex-direction: column;
+  max-height: 86vh;
+  font-size: 12px;
 }
-.settings-col {
-  flex: 1 1 0;
-  min-width: 0;
-}
-.settings-col-divider {
-  width: 1px;
+.settings-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid var(--surface-divider);
   flex-shrink: 0;
-  background: var(--surface-divider);
 }
+.settings-modal-head h3 { margin: 0; }
+.modal-close-btn {
+  background: transparent;
+  border: none;
+  font-size: 15px;
+  color: var(--surface-muted);
+  cursor: pointer;
+  padding: 4px 7px;
+  border-radius: 6px;
+  line-height: 1;
+}
+.modal-close-btn:hover { background: var(--surface-hover-bg); color: var(--surface-fg); }
+
+.settings-modal-body {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+}
+
+/* 좌측 탭 목록 */
+.settings-tabs {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 128px;
+  flex-shrink: 0;
+  padding: 10px 8px;
+  border-right: 1px solid var(--surface-divider);
+}
+.settings-tab {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 10px;
+  border: none;
+  background: transparent;
+  border-radius: 8px;
+  font-size: 12px;
+  font-family: inherit;
+  color: var(--surface-secondary);
+  cursor: pointer;
+  text-align: left;
+}
+.settings-tab:hover { background: var(--surface-hover-bg); }
+.settings-tab.active { background: #4285f4; color: #fff; }
+.settings-tab-icon { font-size: 13px; width: 16px; text-align: center; }
+
+/* 우측 탭 내용 */
+.settings-panes {
+  flex: 1;
+  min-width: 0;
+  padding: 16px 20px;
+  overflow-y: auto;
+}
+.settings-pane { display: none; }
+.settings-pane.active { display: block; }
 
 /* 🆕 v26.7.22b 새 일정 기본 위치 안내 문구 (처음 보는 사용자용) */
 .settings-hint {

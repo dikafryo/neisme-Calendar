@@ -29,7 +29,7 @@
   <div class="titlebar" id="titlebar">
     <div class="titlebar-title">
       <!-- 📅 아이콘: 클릭하면 neisme 캘린더로 이동 -->
-      <span class="brand-icon" id="brandLink" title="neisme 캘린더로 이동">📅</span>
+      <span class="brand-icon" id="brandLink" data-i18n-title="app.brandTitle" title="neisme 캘린더로 이동">📅</span>
       <span>neisme Calendar</span>
       <!-- 버전 표시 (자동으로 v26.5.4 같이 채워짐) -->
       <span class="version-badge" id="versionLabel"></span>
@@ -38,7 +38,7 @@
     </div>
     <div class="titlebar-buttons">
       <!-- ⚙ 설정 버튼 → 설정 패널 열기/닫기 -->
-      <button class="tb-btn" id="settingsBtn" title="설정">⚙</button>
+      <button class="tb-btn" id="settingsBtn" data-i18n-title="titlebar.settings" title="설정">⚙</button>
     </div>
   </div>
 
@@ -54,11 +54,11 @@
       <span class="today-info" id="todayInfo"></span>
     </div>
     <div class="nav-btns">
-      <button class="nav-btn nav-btn-double" id="prevMonth" title="이전 달">◀◀</button>
-      <button class="nav-btn" id="prevWeek" title="이전 주">◀</button>
-      <button class="nav-btn nav-btn-today" id="todayBtn" title="오늘로 이동">오늘</button>
-      <button class="nav-btn" id="nextWeek" title="다음 주">▶</button>
-      <button class="nav-btn nav-btn-double" id="nextMonth" title="다음 달">▶▶</button>
+      <button class="nav-btn nav-btn-double" id="prevMonth" data-i18n-title="nav.prevMonth" title="이전 달">◀◀</button>
+      <button class="nav-btn" id="prevWeek" data-i18n-title="nav.prevWeek" title="이전 주">◀</button>
+      <button class="nav-btn nav-btn-today" id="todayBtn" data-i18n="nav.today" data-i18n-title="nav.todayTitle" title="오늘로 이동">오늘</button>
+      <button class="nav-btn" id="nextWeek" data-i18n-title="nav.nextWeek" title="다음 주">▶</button>
+      <button class="nav-btn nav-btn-double" id="nextMonth" data-i18n-title="nav.nextMonth" title="다음 달">▶▶</button>
     </div>
   </div>
 
@@ -81,189 +81,221 @@
        └─────────────────────────────────────────────────────────────────┘ -->
   <div class="memo-panel">
     <div class="memo-header">
-      <div class="memo-title">📝 메모 / 할 일</div>
+      <div class="memo-title" data-i18n="memo.title">📝 메모 / 할 일</div>
       <div class="memo-tabs">
-        <button class="memo-tab active" data-tab="all">전체</button>
-        <button class="memo-tab" data-tab="active">진행중</button>
-        <button class="memo-tab" data-tab="gtasks">Tasks</button>
+        <button class="memo-tab active" data-tab="all" data-i18n="memo.tabAll">전체</button>
+        <button class="memo-tab" data-tab="active" data-i18n="memo.tabActive">진행중</button>
+        <button class="memo-tab" data-tab="gtasks" data-i18n="memo.tabGtasks">Tasks</button>
       </div>
     </div>
     <div class="memo-list" id="memoList"></div>     <!-- app.js가 채움 -->
     <div class="memo-add-form">
-      <input type="text" class="memo-add-input" id="memoInput" placeholder="새 항목 추가 (Enter로 저장)">
+      <input type="text" class="memo-add-input" id="memoInput" data-i18n-placeholder="memo.inputPlaceholder" placeholder="새 항목 추가 (Enter로 저장)">
     </div>
   </div>
 
   <!-- ╔══════════════════════════════════════════════════════════════════╗
-       ║  ⑤ 설정 패널                                                       ║
+       ║  ⑤ 설정 모달                                                       ║
        ║                                                                    ║
-       ║  ⚙ 톱니바퀴 버튼을 누르면 우상단에 떠오르는 박스.                    ║
-       ║  🆕 v26.7.22b 2열 레이아웃 (항목이 늘어나 한 줄로는 복잡해져서 분리) ║
-       ║  - 좌: 레이아웃 / 표시(테마·투명도·폰트) / 카테고리 / 창 동작        ║
-       ║  - 우: 동기화 (계정 연결: Google / NextCloud + 새 일정 기본 위치)   ║
+       ║  🆕 v26.0828.1 드롭다운 패널 → 중앙 모달 + 좌측 탭 구조로 개편.       ║
+       ║  ⚙ 톱니바퀴 버튼을 누르면 화면 가운데에 뜨는 모달.                    ║
+       ║  탭: 일반 / 스킨 / 카테고리 / 계정연동                                ║
        ║                                                                    ║
-       ║  ★★★ NextCloud 연동에서 수정한 곳: 이 패널 안의 "NextCloud" 행 ★★★  ║
-       ║       (아래 settings-account 두 번째 항목)                          ║
+       ║  ⚠ id="settingsPanel" 은 그대로 유지 — app.js의 기존 .show 토글       ║
+       ║    로직(모달 바깥 클릭/블러 시 닫힘 등)을 안 건드리기 위함.           ║
+       ║    outer div가 곧 modal-bg (배경+중앙정렬), 안쪽 .modal이 실제 박스.  ║
+       ║                                                                    ║
+       ║  ★★★ NextCloud 연동에서 수정한 곳: "계정연동" 탭의 NextCloud 행 ★★★  ║
        ╚══════════════════════════════════════════════════════════════════╝ -->
-  <div class="settings-panel" id="settingsPanel">
-   <div class="settings-columns">
+  <div class="modal-bg settings-panel" id="settingsPanel">
+   <div class="modal settings-modal">
 
-    <!-- ══════════════════ 좌측 열: 앱 표시 / 창 동작 ══════════════════ -->
-    <div class="settings-col">
+    <div class="settings-modal-head">
+      <h3 data-i18n="settings.title">설정</h3>
+      <button class="modal-close-btn" id="settingsCloseBtn" data-i18n-title="settings.close" title="닫기">✕</button>
+    </div>
 
-    <!-- ── 레이아웃 카드 3종 (🆕 v26.5.8i 균일 / 주말 압축 / 주간 일정) ── -->
-    <h4>📐 레이아웃</h4>
-    <div class="layout-options">
-      <div class="layout-card" data-layout="uniform">
-        <div class="layout-preview uniform">
-          <span class="weekend"></span><span></span><span></span><span></span><span></span><span></span><span class="weekend"></span>
+    <div class="settings-modal-body">
+
+     <!-- ── 좌측 탭 목록 ── -->
+     <div class="settings-tabs" id="settingsTabs">
+      <button class="settings-tab active" data-tab="general">
+        <span class="settings-tab-icon">⚙</span><span data-i18n="settings.tab.general">일반</span>
+      </button>
+      <button class="settings-tab" data-tab="skin">
+        <span class="settings-tab-icon">🎨</span><span data-i18n="settings.tab.skin">스킨</span>
+      </button>
+      <button class="settings-tab" data-tab="category">
+        <span class="settings-tab-icon">🏷</span><span data-i18n="settings.tab.category">카테고리</span>
+      </button>
+      <button class="settings-tab" data-tab="account">
+        <span class="settings-tab-icon">🔄</span><span data-i18n="settings.tab.account">계정연동</span>
+      </button>
+     </div>
+
+     <!-- ── 우측 탭 내용 ── -->
+     <div class="settings-panes">
+
+      <!-- ══════════════════ 일반 ══════════════════ -->
+      <div class="settings-pane active" data-pane="general">
+
+        <!-- 🆕 v26.0828.1 언어 선택 (다국어 지원 1단계: 한국어/영어) -->
+        <div class="settings-row">
+          <span data-i18n="settings.general.language">🌐 언어</span>
+          <select id="languageSelect" style="flex:0 0 auto; width:auto; min-width:120px"></select>
         </div>
-        <div class="layout-card-name">균일</div>
-      </div>
-      <div class="layout-card active" data-layout="split">
-        <div class="layout-preview split">
-          <span></span><span></span><span></span><span></span><span></span><span class="weekend"></span><span class="weekend"></span>
+
+        <div class="settings-divider"></div>
+
+        <h4 data-i18n="settings.general.windowBehavior">🪟 창 동작</h4>
+        <div class="settings-row">
+          <span data-i18n="settings.general.lock">창 잠금</span>
+          <input type="checkbox" id="lockToggle" checked>
         </div>
-        <div class="layout-card-name">주말 압축</div>
-      </div>
-      <div class="layout-card" data-layout="week">
-        <div class="layout-preview week">
-          <span></span><span></span><span></span><span></span><span></span><span class="weekend"></span><span class="weekend"></span>
-          <span></span><span></span><span></span><span></span><span></span><span class="weekend"></span><span class="weekend"></span>
+        <div class="settings-row">
+          <span data-i18n="settings.general.alwaysOnTop">항상 위에 표시</span>
+          <input type="checkbox" id="alwaysOnTopToggle" checked>
         </div>
-        <div class="layout-card-name">주간 일정</div>
-      </div>
-    </div>
+        <div class="settings-row">
+          <span data-i18n="settings.general.alwaysAtBottom">항상 뒤에 표시</span>
+          <input type="checkbox" id="alwaysAtBottomToggle">
+        </div>
 
-    <div class="settings-divider"></div>
+        <div class="settings-divider"></div>
 
-    <!-- ── 표시 (테마/투명도/폰트) ── -->
-    <h4>🎨 표시</h4>
-    <!-- 🆕 v26.5.9b 테마 토글 (Light / Dark) -->
-    <div class="settings-row">
-      <span>테마</span>
-      <div class="theme-toggle">
-        <button class="theme-btn active" data-theme="light">☀ Light</button>
-        <button class="theme-btn" data-theme="dark">🌙 Dark</button>
-      </div>
-    </div>
-    <div class="settings-row">
-      <span>투명도</span>
-      <input type="range" id="opacitySlider" min="20" max="100" value="88">
-      <span class="settings-value" id="opacityValue">88%</span>
-    </div>
-    <div class="settings-row">
-      <span>폰트 크기</span>
-      <input type="range" id="fontSlider" min="9" max="18" step="0.5" value="10">
-      <span class="settings-value" id="fontValue">10pt</span>
-    </div>
-    <!-- 🆕 v26.7.22 긴 일정 제목을 잘라내지 않고 여러 줄로 펼쳐서 전체 표시 -->
-    <div class="settings-row">
-      <span>일정 제목 여러 줄</span>
-      <input type="checkbox" id="eventWrapToggle">
-    </div>
+        <!-- 🆕 v26.5.9f 새 일정 기본 저장 위치 (3개 source 통합).
+             🆕 v26.0728.1 여기서 직접 지정하는 컨트롤은 제거 — 별표는 각자의 관리 화면에서:
+             - Google/NextCloud: "계정연동" 탭의 캘린더 목록에서 ★
+             - 로컬: "카테고리" 탭의 (분류 없음) 또는 각 카테고리 행의 ★
+             여기서는 지금 어디로 가는지 한 줄 요약만 보여줌. -->
+        <h4 data-i18n="settings.general.defaultTargetHeading">➕ 새 일정 기본 위치</h4>
+        <p class="settings-hint" data-i18n-html="settings.general.defaultTargetHintHtml">
+          일정을 새로 추가할 때 <b>저장 위치가 자동으로 선택</b>되는 곳이에요.
+          Google/NextCloud는 <b>동기화 설정</b> 모달에서, 로컬은 <b>카테고리 관리</b> 모달에서
+          캘린더/카테고리 옆의 <span class="hint-star">☆→★</span> 를 눌러 지정하세요.
+        </p>
+        <div class="settings-row default-target-row">
+          <div class="account-info">
+            <span class="account-name" data-i18n="settings.general.currentDefault">현재 기본 위치</span>
+            <span class="account-email" id="defaultTargetLabel">(미설정 — Google 우선)</span>
+          </div>
+        </div>
 
-    <div class="settings-divider"></div>
+      </div><!-- /pane general -->
 
-    <!-- ── 🆕 v26.7.22 로컬 일정 카테고리 (업무/개인 등) ── -->
-    <h4>🏷 카테고리</h4>
-    <div class="settings-row">
-      <div class="account-info">
-        <span class="account-name">로컬 일정 카테고리</span>
-        <span class="account-email" id="categorySummary">0개</span>
-      </div>
-      <div class="account-controls">
-        <button class="account-btn" id="categoryManageBtn">관리</button>
-      </div>
-    </div>
+      <!-- ══════════════════ 스킨 ══════════════════ -->
+      <div class="settings-pane" data-pane="skin">
 
-    <div class="settings-divider"></div>
+        <!-- ── 레이아웃 카드 3종 (🆕 v26.5.8i 균일 / 주말 압축 / 주간 일정) ── -->
+        <h4 data-i18n="settings.skin.layout">📐 레이아웃</h4>
+        <div class="layout-options">
+          <div class="layout-card" data-layout="uniform">
+            <div class="layout-preview uniform">
+              <span class="weekend"></span><span></span><span></span><span></span><span></span><span></span><span class="weekend"></span>
+            </div>
+            <div class="layout-card-name" data-i18n="settings.skin.layoutUniform">균일</div>
+          </div>
+          <div class="layout-card active" data-layout="split">
+            <div class="layout-preview split">
+              <span></span><span></span><span></span><span></span><span></span><span class="weekend"></span><span class="weekend"></span>
+            </div>
+            <div class="layout-card-name" data-i18n="settings.skin.layoutSplit">주말 압축</div>
+          </div>
+          <div class="layout-card" data-layout="week">
+            <div class="layout-preview week">
+              <span></span><span></span><span></span><span></span><span></span><span class="weekend"></span><span class="weekend"></span>
+              <span></span><span></span><span></span><span></span><span></span><span class="weekend"></span><span class="weekend"></span>
+            </div>
+            <div class="layout-card-name" data-i18n="settings.skin.layoutWeek">주간 일정</div>
+          </div>
+        </div>
 
-    <!-- ── 창 동작 (잠금 / 항상 위 / 항상 뒤) ── -->
-    <h4>🪟 창 동작</h4>
+        <div class="settings-divider"></div>
 
-    <!-- 창 잠금 토글 -->
-    <div class="settings-row">
-      <span>창 잠금</span>
-      <input type="checkbox" id="lockToggle" checked>
-    </div>
+        <!-- ── 표시 (테마/투명도/폰트) ── -->
+        <h4 data-i18n="settings.skin.display">🎨 표시</h4>
+        <!-- 🆕 v26.5.9b 테마 토글 (Light / Dark) -->
+        <div class="settings-row">
+          <span data-i18n="settings.skin.theme">테마</span>
+          <div class="theme-toggle">
+            <button class="theme-btn active" data-theme="light" data-i18n="settings.skin.themeLight">☀ Light</button>
+            <button class="theme-btn" data-theme="dark" data-i18n="settings.skin.themeDark">🌙 Dark</button>
+          </div>
+        </div>
+        <div class="settings-row">
+          <span data-i18n="settings.skin.opacity">투명도</span>
+          <input type="range" id="opacitySlider" min="20" max="100" value="88">
+          <span class="settings-value" id="opacityValue">88%</span>
+        </div>
+        <div class="settings-row">
+          <span data-i18n="settings.skin.fontSize">폰트 크기</span>
+          <input type="range" id="fontSlider" min="9" max="18" step="0.5" value="10">
+          <span class="settings-value" id="fontValue">10pt</span>
+        </div>
+        <!-- 🆕 v26.7.22 긴 일정 제목을 잘라내지 않고 여러 줄로 펼쳐서 전체 표시 -->
+        <div class="settings-row">
+          <span data-i18n="settings.skin.eventWrap">일정 제목 여러 줄</span>
+          <input type="checkbox" id="eventWrapToggle">
+        </div>
 
-    <!-- 항상 위에 표시 토글 -->
-    <div class="settings-row">
-      <span>항상 위에 표시</span>
-      <input type="checkbox" id="alwaysOnTopToggle" checked>
-    </div>
+      </div><!-- /pane skin -->
 
-    <!-- 항상 뒤에 표시 토글 (바탕화면 고정) -->
-    <div class="settings-row">
-      <span>항상 뒤에 표시</span>
-      <input type="checkbox" id="alwaysAtBottomToggle">
-    </div>
+      <!-- ══════════════════ 카테고리 ══════════════════ -->
+      <div class="settings-pane" data-pane="category">
 
-    </div><!-- /settings-col (좌) -->
+        <!-- ── 🆕 v26.7.22 로컬 일정 카테고리 (업무/개인 등) ── -->
+        <h4 data-i18n="settings.category.heading">🏷 카테고리</h4>
+        <div class="settings-row">
+          <div class="account-info">
+            <span class="account-name" data-i18n="settings.category.localLabel">로컬 일정 카테고리</span>
+            <span class="account-email" id="categorySummary">0개</span>
+          </div>
+          <div class="account-controls">
+            <button class="account-btn" id="categoryManageBtn" data-i18n="settings.category.manageBtn">관리</button>
+          </div>
+        </div>
 
-    <div class="settings-col-divider"></div>
+      </div><!-- /pane category -->
 
-    <!-- ══════════════════ 우측 열: 동기화 / 계정 연결 ══════════════════ -->
-    <div class="settings-col">
+      <!-- ══════════════════ 계정연동 ══════════════════ -->
+      <div class="settings-pane" data-pane="account">
 
-    <!-- ── 동기화 섹션 헤더 (클릭하면 즉시 동기화) ── -->
-    <h4 id="syncHeader" class="clickable-header" title="클릭하여 지금 동기화">🔄 동기화</h4>
+        <!-- ── 동기화 섹션 헤더 (클릭하면 즉시 동기화) ── -->
+        <h4 id="syncHeader" class="clickable-header" data-i18n="settings.account.syncHeading" data-i18n-title="settings.account.syncHeadingTitle" title="클릭하여 지금 동기화">🔄 동기화</h4>
 
-    <!-- ── Google 계정 연결 행 ── -->
-    <div class="settings-row settings-account">
-      <div class="account-info">
-        <span class="account-name">Google Calendar / Tasks</span>
-        <span class="account-email disconnected" id="googleEmail">미연결</span>
-      </div>
-      <div class="account-controls">
-        <button class="account-btn" id="googleAuthBtn">연결</button>
-      </div>
-    </div>
+        <!-- ── Google 계정 연결 행 ── -->
+        <div class="settings-row settings-account">
+          <div class="account-info">
+            <span class="account-name" data-i18n="settings.account.googleLabel">Google Calendar / Tasks</span>
+            <span class="account-email disconnected" id="googleEmail" data-i18n="settings.account.disconnected">미연결</span>
+          </div>
+          <div class="account-controls">
+            <button class="account-btn" id="googleAuthBtn" data-i18n="settings.account.connect">연결</button>
+          </div>
+        </div>
 
-    <!-- ╔══════════════════════════════════════════════════════════════╗
-         ║  ★ NextCloud 계정 연결 행 (수정됨)                             ║
-         ║                                                                ║
-         ║  [변경 전] account-name에 disabled 클래스, 버튼 disabled,      ║
-         ║            "v2 예정", "개발 중"                                ║
-         ║  [변경 후] 정상 활성화. 클릭 시 NextCloud 인증 모달이 열림      ║
-         ║                                                                ║
-         ║  - id="nextcloudStatus": 연결 상태 표시 (사용자명·캘린더명)     ║
-         ║  - id="nextcloudAuthBtn": 연결/해제 버튼                       ║
-         ╚══════════════════════════════════════════════════════════════╝ -->
-    <div class="settings-row settings-account">
-      <div class="account-info">
-        <span class="account-name">NextCloud Calendar</span>
-        <span class="account-email disconnected" id="nextcloudStatus">미연결</span>
-      </div>
-      <div class="account-controls">
-        <button class="account-btn" id="nextcloudAuthBtn">연결</button>
-      </div>
-    </div>
+        <!-- ╔══════════════════════════════════════════════════════════════╗
+             ║  ★ NextCloud 계정 연결 행                                      ║
+             ║  - id="nextcloudStatus": 연결 상태 표시 (사용자명·캘린더명)     ║
+             ║  - id="nextcloudAuthBtn": 연결/해제 버튼                       ║
+             ╚══════════════════════════════════════════════════════════════╝ -->
+        <div class="settings-row settings-account">
+          <div class="account-info">
+            <span class="account-name" data-i18n="settings.account.nextcloudLabel">NextCloud Calendar</span>
+            <span class="account-email disconnected" id="nextcloudStatus" data-i18n="settings.account.disconnected">미연결</span>
+          </div>
+          <div class="account-controls">
+            <button class="account-btn" id="nextcloudAuthBtn" data-i18n="settings.account.connect">연결</button>
+          </div>
+        </div>
 
-    <div class="settings-divider"></div>
+      </div><!-- /pane account -->
 
-    <!-- 🆕 v26.5.9f 새 일정 기본 저장 위치 (3개 source 통합).
-         🆕 v26.0728.1 여기서 직접 지정하는 컨트롤은 제거 — 별표는 각자의 관리 화면에서:
-         - Google/NextCloud: 위 "동기화 설정" 모달의 캘린더 목록에서 ★
-         - 로컬: "카테고리 관리" 모달의 (분류 없음) 또는 각 카테고리 행의 ★
-         여기서는 지금 어디로 가는지 한 줄 요약만 보여줌. -->
-    <h4>➕ 새 일정 기본 위치</h4>
-    <p class="settings-hint">
-      일정을 새로 추가할 때 <b>저장 위치가 자동으로 선택</b>되는 곳이에요.
-      Google/NextCloud는 <b>동기화 설정</b> 모달에서, 로컬은 <b>카테고리 관리</b> 모달에서
-      캘린더/카테고리 옆의 <span class="hint-star">☆→★</span> 를 눌러 지정하세요.
-    </p>
-    <div class="settings-row default-target-row">
-      <div class="account-info">
-        <span class="account-name">현재 기본 위치</span>
-        <span class="account-email" id="defaultTargetLabel">(미설정 — Google 우선)</span>
-      </div>
-    </div>
+     </div><!-- /settings-panes -->
 
-    </div><!-- /settings-col (우) -->
+    </div><!-- /settings-modal-body -->
 
-   </div><!-- /settings-columns -->
+   </div><!-- /modal settings-modal -->
   </div><!-- /settings-panel -->
 
 </div><!-- /widget -->
@@ -277,30 +309,30 @@
 <div class="context-menu" id="contextMenu">
   <div class="ctx-item" id="ctxUnlock">
     <span class="ctx-icon">🔓</span>
-    <span id="ctxUnlockLabel">잠금 해제</span>
+    <span id="ctxUnlockLabel" data-i18n="ctx.unlock">잠금 해제</span>
   </div>
   <div class="ctx-divider"></div>
   <div class="ctx-item" id="ctxSync">
     <span class="ctx-icon">🔄</span>
-    <span>지금 동기화</span>
+    <span data-i18n="ctx.sync">지금 동기화</span>
   </div>
   <div class="ctx-item" id="ctxSettings">
     <span class="ctx-icon">⚙️</span>
-    <span>설정 열기</span>
+    <span data-i18n="ctx.settings">설정 열기</span>
   </div>
   <div class="ctx-divider"></div>
   <div class="ctx-item" id="ctxAlwaysTop">
     <span class="ctx-icon">📌</span>
-    <span id="ctxAlwaysTopLabel">항상 위에 표시</span>
+    <span id="ctxAlwaysTopLabel" data-i18n="ctx.alwaysTop">항상 위에 표시</span>
   </div>
   <div class="ctx-item" id="ctxAlwaysBottom">
     <span class="ctx-icon">📎</span>
-    <span id="ctxAlwaysBottomLabel">항상 뒤에 표시</span>
+    <span id="ctxAlwaysBottomLabel" data-i18n="ctx.alwaysBottom">항상 뒤에 표시</span>
   </div>
   <div class="ctx-divider"></div>
   <div class="ctx-item danger" id="ctxQuit">
     <span class="ctx-icon">✖</span>
-    <span>종료</span>
+    <span data-i18n="ctx.quit">종료</span>
   </div>
 </div>
 
@@ -317,18 +349,18 @@
      ╚════════════════════════════════════════════════════════════════════╝ -->
 <div class="modal-bg" id="eventModalBg">
   <div class="modal">
-    <h3 id="modalTitle">일정 추가</h3>
+    <h3 id="modalTitle" data-i18n="modal.eventAdd">일정 추가</h3>
 
-    <label>제목</label>
-    <input type="text" id="evTitle" placeholder="일정 제목">
+    <label data-i18n="label.title">제목</label>
+    <input type="text" id="evTitle" data-i18n-placeholder="placeholder.eventTitle" placeholder="일정 제목">
 
     <div class="field-row">
       <div>
-        <label>시작일</label>
+        <label data-i18n="label.startDate">시작일</label>
         <input type="date" id="evDate">
       </div>
       <div>
-        <label>시작시각 (비우면 종일)</label>
+        <label data-i18n="label.startTime">시작시각 (비우면 종일)</label>
         <input type="time" id="evTime">
       </div>
     </div>
@@ -336,33 +368,33 @@
     <!-- 🆕 v26.5.8c 종료일/종료시각 -->
     <div class="field-row">
       <div>
-        <label>종료일</label>
+        <label data-i18n="label.endDate">종료일</label>
         <input type="date" id="evEndDate">
       </div>
       <div>
-        <label>종료시각 (비우면 자동)</label>
+        <label data-i18n="label.endTime">종료시각 (비우면 자동)</label>
         <input type="time" id="evEndTime">
       </div>
     </div>
 
-    <label>알림 (시간이 있을 때만)</label>
+    <label data-i18n="label.alarm">알림 (시간이 있을 때만)</label>
     <div class="alarm-options" id="alarmOptions">
-      <div class="alarm-chip" data-alarm="5min">5분 전</div>
-      <div class="alarm-chip" data-alarm="30min">30분 전</div>
-      <div class="alarm-chip" data-alarm="1day">하루 전</div>
+      <div class="alarm-chip" data-alarm="5min" data-i18n="alarm.5min">5분 전</div>
+      <div class="alarm-chip" data-alarm="30min" data-i18n="alarm.30min">30분 전</div>
+      <div class="alarm-chip" data-alarm="1day" data-i18n="alarm.1day">하루 전</div>
     </div>
 
-    <label>저장 위치</label>
+    <label data-i18n="label.saveLocation">저장 위치</label>
     <!-- ★ 수정: nextcloud 옵션의 disabled 와 "(개발 중)" 표시 제거 -->
     <select id="evSource">
-      <option value="local">로컬</option>
-      <option value="google">Google Calendar</option>
-      <option value="nextcloud">NextCloud</option>
+      <option value="local" data-i18n="option.local">로컬</option>
+      <option value="google" data-i18n="option.google">Google Calendar</option>
+      <option value="nextcloud" data-i18n="option.nextcloud">NextCloud</option>
     </select>
 
     <!-- 🆕 캘린더 하위 선택 (source가 google/nextcloud일 때만 보임) -->
     <div id="evCalendarRow" style="display:none">
-      <label>캘린더</label>
+      <label data-i18n="label.calendar">캘린더</label>
       <select id="evCalendar"></select>
     </div>
 
@@ -370,7 +402,7 @@
          카테고리 이름과 같은 이름의 Google/NextCloud 캘린더가 있으면
          저장 위치를 원격으로 바꿀 때 그 캘린더가 자동 선택됨 (= 카테고리 유지). -->
     <div id="evCategoryRow" style="display:none">
-      <label>카테고리</label>
+      <label data-i18n="label.category">카테고리</label>
       <select id="evCategory"></select>
       <div id="evCategoryHint" class="rec-hint"></div>
     </div>
@@ -378,66 +410,66 @@
     <!-- 🆕 v26.5.8a 반복 옵션 -->
     <!-- 🆕 v26.5.8j MONTHLY BYDAY 모드 추가 -->
     <!-- 🆕 v26.5.8k WEEKLY BYDAY (다중 요일 토글) 추가 -->
-    <label>반복</label>
+    <label data-i18n="label.recurrence">반복</label>
     <div class="recurrence-row">
       <select id="evRecurrenceFreq">
-        <option value="">반복 없음</option>
-        <option value="DAILY">매일</option>
-        <option value="WEEKLY">매주</option>
-        <option value="MONTHLY">매월</option>
-        <option value="YEARLY">매년</option>
+        <option value="" data-i18n="recurrence.none">반복 없음</option>
+        <option value="DAILY" data-i18n="recurrence.daily">매일</option>
+        <option value="WEEKLY" data-i18n="recurrence.weekly">매주</option>
+        <option value="MONTHLY" data-i18n="recurrence.monthly">매월</option>
+        <option value="YEARLY" data-i18n="recurrence.yearly">매년</option>
       </select>
-      <input type="number" id="evRecurrenceInterval" min="1" max="99" value="1" title="간격 (예: 매주 → 1주마다, 격주 → 2주마다)" style="display:none">
+      <input type="number" id="evRecurrenceInterval" min="1" max="99" value="1" data-i18n-title="recurrence.intervalTitle" title="간격 (예: 매주 → 1주마다, 격주 → 2주마다)" style="display:none">
       <!-- 🆕 v26.5.8j MONTHLY 일 때만 보이는 모드 (날짜 / 주차 / 마지막 주차) -->
-      <select id="evRecurrenceMonthlyMode" style="display:none" title="매월 반복 방식">
-        <option value="bymonthday">날짜로 반복</option>
-        <option value="byday">주차로 반복</option>
-        <option value="bydaylast">마지막 주차로 반복</option>
+      <select id="evRecurrenceMonthlyMode" style="display:none" data-i18n-title="recurrence.monthlyModeTitle" title="매월 반복 방식">
+        <option value="bymonthday" data-i18n="recurrence.monthlyByDate">날짜로 반복</option>
+        <option value="byday" data-i18n="recurrence.monthlyByWeek">주차로 반복</option>
+        <option value="bydaylast" data-i18n="recurrence.monthlyByLastWeek">마지막 주차로 반복</option>
       </select>
     </div>
     <!-- 🆕 v26.5.8k WEEKLY 일 때만 보이는 요일 선택 토글 -->
     <!-- 시작일 요일은 자동 active+disabled (= 첫 발생 보장) -->
     <div id="evRecurrenceWeeklyDays" class="weekly-days-row" style="display:none">
-      <button type="button" class="weekday-toggle" data-dow="0">일</button>
-      <button type="button" class="weekday-toggle" data-dow="1">월</button>
-      <button type="button" class="weekday-toggle" data-dow="2">화</button>
-      <button type="button" class="weekday-toggle" data-dow="3">수</button>
-      <button type="button" class="weekday-toggle" data-dow="4">목</button>
-      <button type="button" class="weekday-toggle" data-dow="5">금</button>
-      <button type="button" class="weekday-toggle" data-dow="6">토</button>
+      <button type="button" class="weekday-toggle" data-dow="0" data-i18n="weekday.sun">일</button>
+      <button type="button" class="weekday-toggle" data-dow="1" data-i18n="weekday.mon">월</button>
+      <button type="button" class="weekday-toggle" data-dow="2" data-i18n="weekday.tue">화</button>
+      <button type="button" class="weekday-toggle" data-dow="3" data-i18n="weekday.wed">수</button>
+      <button type="button" class="weekday-toggle" data-dow="4" data-i18n="weekday.thu">목</button>
+      <button type="button" class="weekday-toggle" data-dow="5" data-i18n="weekday.fri">금</button>
+      <button type="button" class="weekday-toggle" data-dow="6" data-i18n="weekday.sat">토</button>
     </div>
     <!-- 🆕 v26.5.8o MONTHLY + byday 모드 일 때 보이는 ordinal 토글 (다중 주차 선택) -->
     <!-- dow 는 시작일 요일에서 자동 추론. 시작일이 그 달의 N번째 (요일) 이면 N번 토글 active+disabled -->
     <div id="evRecurrenceMonthlyOrdinals" class="weekly-days-row" style="display:none">
-      <button type="button" class="weekday-toggle ordinal-toggle" data-ord="1">1번째</button>
-      <button type="button" class="weekday-toggle ordinal-toggle" data-ord="2">2번째</button>
-      <button type="button" class="weekday-toggle ordinal-toggle" data-ord="3">3번째</button>
-      <button type="button" class="weekday-toggle ordinal-toggle" data-ord="4">4번째</button>
-      <button type="button" class="weekday-toggle ordinal-toggle" data-ord="5">5번째</button>
-      <button type="button" class="weekday-toggle ordinal-toggle" data-ord="-1">마지막</button>
+      <button type="button" class="weekday-toggle ordinal-toggle" data-ord="1" data-i18n="ordinal.1">1번째</button>
+      <button type="button" class="weekday-toggle ordinal-toggle" data-ord="2" data-i18n="ordinal.2">2번째</button>
+      <button type="button" class="weekday-toggle ordinal-toggle" data-ord="3" data-i18n="ordinal.3">3번째</button>
+      <button type="button" class="weekday-toggle ordinal-toggle" data-ord="4" data-i18n="ordinal.4">4번째</button>
+      <button type="button" class="weekday-toggle ordinal-toggle" data-ord="5" data-i18n="ordinal.5">5번째</button>
+      <button type="button" class="weekday-toggle ordinal-toggle" data-ord="-1" data-i18n="ordinal.last">마지막</button>
     </div>
 
     <div id="evRecurrenceEndRow" style="display:none">
-      <label>종료 조건</label>
+      <label data-i18n="label.recurrenceEnd">종료 조건</label>
       <div class="recurrence-end-row">
         <select id="evRecurrenceEndType">
-          <option value="never">계속 반복</option>
-          <option value="count">N회 반복 후 종료</option>
-          <option value="until">특정 날짜까지</option>
+          <option value="never" data-i18n="recurrenceEnd.never">계속 반복</option>
+          <option value="count" data-i18n="recurrenceEnd.count">N회 반복 후 종료</option>
+          <option value="until" data-i18n="recurrenceEnd.until">특정 날짜까지</option>
         </select>
-        <input type="number" id="evRecurrenceCount" min="1" max="999" value="10" placeholder="횟수" style="display:none">
+        <input type="number" id="evRecurrenceCount" min="1" max="999" value="10" data-i18n-placeholder="placeholder.count" placeholder="횟수" style="display:none">
         <input type="date" id="evRecurrenceUntil" style="display:none">
       </div>
       <div id="evRecurrenceHint" class="rec-hint"></div>
     </div>
 
-    <label>메모</label>
-    <textarea id="evMemo" placeholder="(선택사항)"></textarea>
+    <label data-i18n="label.memo">메모</label>
+    <textarea id="evMemo" data-i18n-placeholder="placeholder.memoOptional" placeholder="(선택사항)"></textarea>
 
     <div class="modal-actions">
-      <button class="btn btn-secondary" id="cancelEvent">취소</button>
-      <button class="btn btn-danger" id="deleteEvent" style="display:none">삭제</button>
-      <button class="btn btn-primary" id="saveEvent">저장</button>
+      <button class="btn btn-secondary" id="cancelEvent" data-i18n="btn.cancel">취소</button>
+      <button class="btn btn-danger" id="deleteEvent" style="display:none" data-i18n="btn.delete">삭제</button>
+      <button class="btn btn-primary" id="saveEvent" data-i18n="btn.save">저장</button>
     </div>
   </div>
 </div>
@@ -453,13 +485,13 @@
      ╚════════════════════════════════════════════════════════════════════╝ -->
 <div class="modal-bg" id="recScopeModalBg">
   <div class="modal modal-small">
-    <h3 id="recScopeTitle">반복 일정 수정</h3>
-    <p id="recScopeMsg" class="rec-scope-msg">이 변경 사항을 어떻게 적용할까요?</p>
+    <h3 id="recScopeTitle" data-i18n="recScope.title">반복 일정 수정</h3>
+    <p id="recScopeMsg" class="rec-scope-msg" data-i18n="recScope.msg">이 변경 사항을 어떻게 적용할까요?</p>
     <div class="rec-scope-actions">
-      <button class="btn btn-primary rec-scope-btn" data-scope="single">이 일정만</button>
-      <button class="btn btn-secondary rec-scope-btn" data-scope="future">이후 모두 (이 날짜부터)</button>
-      <button class="btn btn-secondary rec-scope-btn" data-scope="all">모두 (시리즈 전체)</button>
-      <button class="btn btn-secondary rec-scope-btn" data-scope="cancel">취소</button>
+      <button class="btn btn-primary rec-scope-btn" data-scope="single" data-i18n="recScope.single">이 일정만</button>
+      <button class="btn btn-secondary rec-scope-btn" data-scope="future" data-i18n="recScope.future">이후 모두 (이 날짜부터)</button>
+      <button class="btn btn-secondary rec-scope-btn" data-scope="all" data-i18n="recScope.all">모두 (시리즈 전체)</button>
+      <button class="btn btn-secondary rec-scope-btn" data-scope="cancel" data-i18n="recScope.cancel">취소</button>
     </div>
   </div>
 </div>
@@ -480,39 +512,39 @@
 
     <!-- ── Step 1: 서버 정보 입력 ── -->
     <div id="ncStep1">
-      <h3>NextCloud 연결</h3>
+      <h3 data-i18n="nc.connectTitle">NextCloud 연결</h3>
 
-      <label>서버 주소</label>
+      <label data-i18n="nc.serverLabel">서버 주소</label>
       <input type="text" id="ncServer" placeholder="https://cloud.example.com" autocomplete="off">
 
       <div class="field-row">
         <div>
-          <label>사용자 ID</label>
+          <label data-i18n="nc.userLabel">사용자 ID</label>
           <input type="text" id="ncUser" autocomplete="off">
         </div>
         <div>
-          <label>앱 비밀번호</label>
+          <label data-i18n="nc.passLabel">앱 비밀번호</label>
           <input type="password" id="ncPass" autocomplete="new-password">
         </div>
       </div>
 
       <!-- 안내문: 앱 비밀번호 사용 권장 -->
-      <p class="nc-hint">
+      <p class="nc-hint" data-i18n-html="nc.hintHtml">
         보안을 위해 <b>앱 비밀번호</b>를 권장합니다.<br>
         NextCloud → 설정 → 보안 → 기기 및 세션 → "새 앱 비밀번호 만들기"
       </p>
 
       <div class="modal-actions">
-        <button class="btn btn-secondary" id="ncCancel">취소</button>
-        <button class="btn btn-primary" id="ncConnect">연결</button>
+        <button class="btn btn-secondary" id="ncCancel" data-i18n="btn.cancel">취소</button>
+        <button class="btn btn-primary" id="ncConnect" data-i18n="settings.account.connect">연결</button>
       </div>
     </div>
 
     <!-- ── Step 2: 캘린더 선택 (Step1 성공 후 표시, 멀티셀렉) ── -->
     <div id="ncStep2" style="display:none">
-      <h3>동기화할 캘린더 선택</h3>
+      <h3 data-i18n="nc.selectCalendarsTitle">동기화할 캘린더 선택</h3>
       <!-- 🆕 v26.0728.1 별 2종 설명 — ⭐(계정 대표)과 ★(전체 기본 위치)를 혼동하기 쉬워 명시 -->
-      <p class="cal-select-hint">
+      <p class="cal-select-hint" data-i18n-html="cal.selectHintHtml">
         체크 = 동기화에 포함<br>
         <b>⭐ 노란 별</b> = 이 계정에서 대표로 쓸 캘린더 (1개)<br>
         <b>★ 주황 별</b> = 새 일정 추가 시 자동 선택되는 전체 기본 위치 (로컬·Google·NextCloud 통합 1곳)
@@ -522,8 +554,8 @@
       <div id="ncCalendars" class="cal-select-list"></div>
 
       <div class="modal-actions">
-        <button class="btn btn-secondary" id="ncCancel2">취소</button>
-        <button class="btn btn-primary" id="ncSelectDone">완료</button>
+        <button class="btn btn-secondary" id="ncCancel2" data-i18n="btn.cancel">취소</button>
+        <button class="btn btn-primary" id="ncSelectDone" data-i18n="btn.done">완료</button>
       </div>
     </div>
 
@@ -542,9 +574,9 @@
      ╚════════════════════════════════════════════════════════════════════╝ -->
 <div class="modal-bg" id="gcalModalBg">
   <div class="modal">
-    <h3>Google 캘린더 선택</h3>
+    <h3 data-i18n="gcal.title">Google 캘린더 선택</h3>
     <!-- 🆕 v26.0728.1 별 2종 설명 -->
-    <p class="cal-select-hint">
+    <p class="cal-select-hint" data-i18n-html="cal.selectHintHtml">
       체크 = 동기화에 포함<br>
       <b>⭐ 노란 별</b> = 이 계정에서 대표로 쓸 캘린더 (1개)<br>
       <b>★ 주황 별</b> = 새 일정 추가 시 자동 선택되는 전체 기본 위치 (로컬·Google·NextCloud 통합 1곳)
@@ -553,10 +585,10 @@
     <div id="gcalList" class="cal-select-list"></div>
 
     <div class="modal-actions modal-actions-split">
-      <button class="link-btn link-btn-danger" id="gcalRevoke">연결 해제</button>
+      <button class="link-btn link-btn-danger" id="gcalRevoke" data-i18n="btn.disconnect">연결 해제</button>
       <div class="modal-actions-right">
-        <button class="btn btn-secondary" id="gcalCancel">취소</button>
-        <button class="btn btn-primary" id="gcalSave">저장</button>
+        <button class="btn btn-secondary" id="gcalCancel" data-i18n="btn.cancel">취소</button>
+        <button class="btn btn-primary" id="gcalSave" data-i18n="btn.save">저장</button>
       </div>
     </div>
   </div>
@@ -571,9 +603,9 @@
      ╚════════════════════════════════════════════════════════════════════╝ -->
 <div class="modal-bg" id="ncManageModalBg">
   <div class="modal">
-    <h3>NextCloud 캘린더 선택</h3>
+    <h3 data-i18n="ncManage.title">NextCloud 캘린더 선택</h3>
     <!-- 🆕 v26.0728.1 별 2종 설명 -->
-    <p class="cal-select-hint">
+    <p class="cal-select-hint" data-i18n-html="cal.selectHintHtml">
       체크 = 동기화에 포함<br>
       <b>⭐ 노란 별</b> = 이 계정에서 대표로 쓸 캘린더 (1개)<br>
       <b>★ 주황 별</b> = 새 일정 추가 시 자동 선택되는 전체 기본 위치 (로컬·Google·NextCloud 통합 1곳)
@@ -582,10 +614,10 @@
     <div id="ncManageList" class="cal-select-list"></div>
 
     <div class="modal-actions modal-actions-split">
-      <button class="link-btn link-btn-danger" id="ncManageRevoke">연결 해제</button>
+      <button class="link-btn link-btn-danger" id="ncManageRevoke" data-i18n="btn.disconnect">연결 해제</button>
       <div class="modal-actions-right">
-        <button class="btn btn-secondary" id="ncManageCancel">취소</button>
-        <button class="btn btn-primary" id="ncManageSave">저장</button>
+        <button class="btn btn-secondary" id="ncManageCancel" data-i18n="btn.cancel">취소</button>
+        <button class="btn btn-primary" id="ncManageSave" data-i18n="btn.save">저장</button>
       </div>
     </div>
   </div>
@@ -604,8 +636,8 @@
      ╚════════════════════════════════════════════════════════════════════╝ -->
 <div class="modal-bg" id="catModalBg">
   <div class="modal">
-    <h3>카테고리 관리</h3>
-    <p class="cal-select-hint">
+    <h3 data-i18n="cat.title">카테고리 관리</h3>
+    <p class="cal-select-hint" data-i18n-html="cat.hintHtml">
       로컬 일정을 분류하는 <b>내 캘린더</b>입니다. 이름과 색을 직접 정하세요.<br>
       카테고리와 <b>같은 이름</b>의 Google · NextCloud 캘린더가 있으면,
       저장 위치를 원격으로 바꿀 때 그 캘린더가 자동 선택되어 분류가 유지됩니다.<br>
@@ -614,11 +646,11 @@
 
     <div id="catList" class="cal-select-list"></div>
 
-    <button class="link-btn" id="catAdd" style="margin-top:8px">＋ 카테고리 추가</button>
+    <button class="link-btn" id="catAdd" style="margin-top:8px" data-i18n="cat.addBtn">＋ 카테고리 추가</button>
 
     <div class="modal-actions">
-      <button class="btn btn-secondary" id="catCancel">취소</button>
-      <button class="btn btn-primary" id="catSave">저장</button>
+      <button class="btn btn-secondary" id="catCancel" data-i18n="btn.cancel">취소</button>
+      <button class="btn btn-primary" id="catSave" data-i18n="btn.save">저장</button>
     </div>
   </div>
 </div>
@@ -644,6 +676,8 @@
 <!-- 메인 스크립트 -->
 <!-- 🆕 v26.0728.1 메모 그리드 카드 색상 — sticky.html과 공유 -->
 <script src="sticky-colors.js"></script>
+<!-- 🆕 v26.0828.1 다국어(i18n) 지원 — app.js보다 먼저 로드해야 t()/applyI18n() 사용 가능 -->
+<script src="locales.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

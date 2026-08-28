@@ -50,6 +50,8 @@ const state = {
   opacity: 0.88,                // 위젯 투명도 (0~1)
   fontSize: 10,                 // 기본 폰트 크기 (pt)
   theme: 'light',               // 🆕 v26.5.9b 'light' | 'dark'
+  // 🆕 v26.0828.1 UI 언어 ('ko' | 'en'). locales.js의 LOCALES/LANGUAGE_LIST 참고.
+  language: 'ko',
   // 🆕 v26.7.22 일정 제목 여러 줄 표시. false = 한 줄 + ellipsis (기존 동작),
   // true = 셀 안에서 줄바꿈해 제목 전체 표시 (.widget.event-wrap CSS).
   eventWrap: false,
@@ -106,10 +108,21 @@ const state = {
 // ─────────────────────────────────────────────────────────────────────
 // 상수
 // ─────────────────────────────────────────────────────────────────────
-// 월 이름 한국어 (renderHeader에서 사용)
-const MONTHS = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
-// 요일 이름 한국어 (0=일요일 ~ 6=토요일, JS Date.getDay()와 동일한 인덱스)
-const DOW = ['일','월','화','수','목','금','토'];
+// 월/요일 이름. 🆕 v26.0828.1 locales.js의 LOCALES[state.language]에서 채워짐 (다국어 지원) —
+// const가 아니라 let인 이유: applyLocaleArrays()가 언어 전환 시 내용을 새로 갈아끼움.
+// (호출부는 그대로 MONTHS[i] / DOW[i] 로 읽으면 되게 배열 자체는 유지하고 내용만 교체)
+let MONTHS = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
+// 요일 이름 (0=일요일 ~ 6=토요일, JS Date.getDay()와 동일한 인덱스)
+let DOW = ['일','월','화','수','목','금','토'];
+
+/** 🆕 v26.0828.1 현재 언어(window.currentLang)에 맞춰 MONTHS/DOW 내용을 갱신.
+ *  배열 참조 자체는 유지(splice)해서 이미 구조분해/캡처된 곳이 없어야 하는데,
+ *  이 파일은 항상 MONTHS[i] 형태로 접근하므로 재할당으로도 충분히 안전함. */
+function applyLocaleArrays() {
+  const dict = (window.LOCALES && window.LOCALES[window.currentLang]) || window.LOCALES.ko;
+  MONTHS = dict.months;
+  DOW = dict.dow;
+}
 // 알람 키 → 분 단위 변환 테이블 (scheduleAlarms에서 setTimeout 시간 계산에 사용)
 const ALARM_MINUTES = { '5min': 5, '30min': 30, '1day': 24 * 60 };
 
@@ -153,6 +166,11 @@ async function loadAll() {
   // 설정 (레이아웃, 투명도, 폰트크기): 있으면 state에 덮어쓰기
   const settings = await loadJSON('cal_settings_v4');
   if (settings) Object.assign(state, settings);
+
+  // 🆕 v26.0828.1 언어 — 저장된 값이 지원 목록에 없으면 한국어로 안전 폴백
+  if (!window.LOCALES || !window.LOCALES[state.language]) state.language = 'ko';
+  window.currentLang = state.language;
+  applyLocaleArrays();
 
   // 🆕 v26.7.22 로컬 카테고리 — 첫 실행이면 빈 목록 (= 모든 로컬 일정이 "(분류 없음)").
   //   일정과 별도 키라 스키마 버전도 따로 (cal_categories_v1).
@@ -223,7 +241,8 @@ async function saveSettings() {
     fontSize: state.fontSize,
     theme: state.theme,                // 🆕 v26.5.9b
     defaultTarget: state.defaultTarget, // 🆕 v26.5.9f
-    eventWrap: state.eventWrap         // 🆕 v26.7.22
+    eventWrap: state.eventWrap,        // 🆕 v26.7.22
+    language: state.language           // 🆕 v26.0828.1
   });
 }
 
@@ -358,7 +377,7 @@ function scheduleAlarms() {
  */
 function fireAlarm(event, alarmKey) {
   const label = alarmLabel(alarmKey);
-  const title = `🔔 ${label} 알림`;
+  const title = t('notification.titleFmt', { label });
   const body = `${event.time}  ${event.title}${event.memo ? '\n' + event.memo : ''}`;
 
   if (isElectron) {
@@ -373,7 +392,7 @@ function fireAlarm(event, alarmKey) {
     new Notification(title, { body });
   } else {
     // 둘 다 안 되면 위젯 안의 토스트
-    toast(`🔔 ${event.title} (${label})`);
+    toast(t('toast.alarmFiredFmt', { title: event.title, label }));
   }
 }
 
@@ -501,11 +520,11 @@ function renderHeader() {
   // 🆕 v26.5.8i 그리드 가운데 날짜 (모드별: 5주는 +17일, 2주는 +7일)
   const center = getViewCenter();
 
-  document.getElementById('yearLabel').textContent  = center.getFullYear() + '년';
+  document.getElementById('yearLabel').textContent  = center.getFullYear() + t('nav.yearSuffix');
   document.getElementById('monthLabel').textContent = MONTHS[center.getMonth()];
   // "· 오늘 5.2 (토)" 형식
   document.getElementById('todayInfo').textContent =
-    `· 오늘 ${today.getMonth()+1}.${today.getDate()} (${DOW[today.getDay()]})`;
+    t('nav.todayInfo', { month: today.getMonth()+1, day: today.getDate(), dow: DOW[today.getDay()] });
 }
 
 /**
@@ -631,7 +650,8 @@ function renderCalendar() {
       `;
       }).join('');
       if (dayEvents.length > maxEvents) {
-        const moreText = isHalf ? `+${dayEvents.length - maxEvents}` : `+${dayEvents.length - maxEvents}개 더`;
+        const moreN = dayEvents.length - maxEvents;
+        const moreText = isHalf ? t('day.moreShort', { n: moreN }) : t('day.moreLong', { n: moreN });
         eventHtml += `<div class="day-event-more">${moreText}</div>`;
       }
     }
@@ -659,7 +679,7 @@ function renderCalendar() {
       ev.stopPropagation();   // document 클릭 핸들러로 전파 방지(설정창 닫힘 방지)
       // 셀 클릭 시 다른 팝업들은 다 닫고 popover만 새로 열림
       hideContextMenu();
-      document.getElementById('settingsPanel').classList.remove('show');
+      closeSettingsModal();
 
       state.selectedDate = d;
       showDayPopover(cell, d);
@@ -669,7 +689,7 @@ function renderCalendar() {
     cell.addEventListener('dblclick', (ev) => {
       ev.stopPropagation();
       hideContextMenu();
-      document.getElementById('settingsPanel').classList.remove('show');
+      closeSettingsModal();
       hideDayPopover();
 
       // 🆕 v26.5.8h 일정 항목 위에서 더블클릭 → 그 일정 편집 모달
@@ -701,11 +721,11 @@ function showDayPopover(cell, date) {
 
   // 헤더 날짜 표시 ("5월 1일 (목)")
   document.getElementById('popoverDate').textContent =
-    `${date.getMonth()+1}월 ${date.getDate()}일 (${DOW[date.getDay()]})`;
+    t('popover.dateFormat', { month: date.getMonth()+1, day: date.getDate(), dow: DOW[date.getDay()] });
 
   // 일정 리스트 HTML
   const eventsHtml = events.length === 0
-    ? '<div class="pop-empty">일정이 없습니다</div>'
+    ? `<div class="pop-empty">${t('popover.empty')}</div>`
     : events.map(e => {
         // 🆕 반복 마커
         const recMark = isPartOfRecurrence(e) ? '<span class="recurrence-mark">🔁</span> ' : '';
@@ -718,7 +738,7 @@ function showDayPopover(cell, date) {
           <div class="pop-event-info">
             <div class="pop-event-title">${recMark}${escapeHtml(e.title)}</div>
             <div class="pop-event-time">
-              ${e.time || '종일'}${catText}
+              ${e.time || t('popover.allDay')}${catText}
               ${e.alarms && e.alarms.length ? ` · 🔔 ${e.alarms.map(alarmLabel).join(', ')}` : ''}
             </div>
           </div>
@@ -779,7 +799,7 @@ function renderMemos() {
 
   // 비어있으면 안내문
   if (memos.length === 0) {
-    list.innerHTML = '<div class="memo-empty">항목이 없습니다</div>';
+    list.innerHTML = `<div class="memo-empty">${t('memo.empty')}</div>`;
     return;
   }
 
@@ -792,13 +812,13 @@ function renderMemos() {
   // 스티커 메모 창(sticky.html, 바탕화면 독립 창)에서 한다.
   // 색은 sticky-colors.js의 stickyColorFor(id)로 계산 — sticky 창과 항상 동일한 색.
   list.innerHTML = memos.map(m => `
-    <div class="memo-item ${m.completed ? 'completed' : ''}" data-id="${m.id}" style="--sticky-bg:${stickyColorFor(m.id)}" title="더블클릭 → 스티커로 열기">
+    <div class="memo-item ${m.completed ? 'completed' : ''}" data-id="${m.id}" style="--sticky-bg:${stickyColorFor(m.id)}" title="${t('memo.openStickyTitle')}">
       <div class="memo-card-top">
         <div class="memo-checkbox"></div>
         <span class="memo-source-badge ${m.source}">${m.source === 'gtasks' ? 'G' : 'L'}</span>
       </div>
       <div class="memo-text">${escapeHtml(m.text)}</div>
-      <button class="memo-delete" title="삭제">✕</button>
+      <button class="memo-delete" title="${t('memo.deleteTitle')}">✕</button>
     </div>
   `).join('');
 
@@ -864,7 +884,7 @@ async function addMemo(text) {
       newMemo = r.task;   // 서버가 부여한 googleId, etag 포함된 객체로 교체
     } else {
       // 푸시 실패 시 로컬로 저장 (네트워크 끊김 등)
-      toast('Google Tasks 푸시 실패: ' + r.error, 3500);
+      toast(t('toast.googleTasksPushFail', { err: r.error }), 3500);
       newMemo.source = 'local';
     }
   }
@@ -1062,9 +1082,9 @@ function eventInlineStyle(e) {
 
 /** 알람 키 → 한국어 라벨 ('5min' → '5분전', '30min' → '30분전', '1day' → '1일전') */
 function alarmLabel(a) {
-  return a === '5min'  ? '5분전'
-       : a === '30min' ? '30분전'
-       :                 '1일전';
+  return a === '5min'  ? t('alarmShort.5min')
+       : a === '30min' ? t('alarmShort.30min')
+       :                 t('alarmShort.1day');
 }
 
 /**
@@ -1097,7 +1117,7 @@ function calDisplayName(c, source) {
   if (source === 'google') {
     const s = (c.summary || '').trim();
     if (s) return s;
-    return c.id || '(이름 없음)';
+    return c.id || t('cal.noName');
   }
   // nextcloud
   const dn = c.displayName;
@@ -1116,7 +1136,7 @@ function calDisplayName(c, source) {
     } catch {}
     return c.url;
   }
-  return '(이름 없음)';
+  return t('cal.noName');
 }
 
 /**
@@ -1171,16 +1191,16 @@ function renderDefaultTargetLabel() {
   if (!lbl) return;
   const r = resolveDefaultTarget();
   if (!r) {
-    lbl.textContent = '(미설정 — Google 우선)';
+    lbl.textContent = t('defaultTarget.unset');
   } else if (r.source === 'local') {
     const cat = categoryById(r.id);
-    lbl.textContent = `로컬 · ${cat ? cat.name : '(분류 없음)'}`;
+    lbl.textContent = t('defaultTarget.localFmt', { name: cat ? cat.name : t('category.none') });
   } else if (r.source === 'google') {
     const c = (state.googleSelectedCalendars || []).find(x => x.id === r.id);
-    lbl.textContent = `Google · ${c ? calDisplayName(c, 'google') : r.id}`;
+    lbl.textContent = t('defaultTarget.googleFmt', { name: c ? calDisplayName(c, 'google') : r.id });
   } else if (r.source === 'nextcloud') {
     const c = (state.nextcloudSelectedCalendars || []).find(x => x.url === r.id);
-    lbl.textContent = `NextCloud · ${c ? calDisplayName(c, 'nextcloud') : r.id}`;
+    lbl.textContent = t('defaultTarget.nextcloudFmt', { name: c ? calDisplayName(c, 'nextcloud') : r.id });
   }
 }
 
@@ -1849,7 +1869,7 @@ function buildEventsByDateMap(rangeStart, rangeEnd) {
 function openEventModal(event, defaultDate) {
   // 🔧 v26.5.8a-fix1: 진입 시 모든 보조 overlay 정리 (방어)
   document.getElementById('recScopeModalBg').classList.remove('show');
-  document.getElementById('settingsPanel').classList.remove('show');
+  closeSettingsModal();
   if (typeof hideContextMenu === 'function') hideContextMenu();
   if (typeof hideDayPopover === 'function') hideDayPopover();
   
@@ -1902,7 +1922,7 @@ function openEventModal(event, defaultDate) {
       // ctx는 null 유지 → saveEvent의 일반 편집 분기로 흐름
     }
 
-    title.textContent = '일정 편집' + (state.editingInstanceContext ? ' (반복)' : '');
+    title.textContent = t('modal.eventEdit') + (state.editingInstanceContext ? t('modal.eventEditRecurringSuffix') : '');
     document.getElementById('evTitle').value  = editTarget.title || '';
     // 가상 인스턴스를 편집할 때는 날짜는 "그 인스턴스의 날짜"로 보여야 함
     document.getElementById('evDate').value   = (event._instanceDate || event.date || editTarget.date);
@@ -1948,7 +1968,7 @@ function openEventModal(event, defaultDate) {
   } else {
     // ─── 신규 모드: 빈 폼 ───
     state.editingEventId = null;
-    title.textContent = '일정 추가';
+    title.textContent = t('modal.eventAdd');
     document.getElementById('evTitle').value  = '';
     // 더블클릭한 셀의 날짜 또는 마지막으로 클릭한 날짜
     document.getElementById('evDate').value   = formatDate(defaultDate || state.selectedDate);
@@ -2049,7 +2069,7 @@ function updateEventCalendarDropdown(event) {
     : state.nextcloudSelectedCalendars;
 
   if (!calendars || calendars.length === 0) {
-    sel.innerHTML = '<option value="">선택된 캘린더 없음</option>';
+    sel.innerHTML = `<option value="">${t('evCalendar.noneOption')}</option>`;
     sel.disabled = true;
     return;
   }
@@ -2129,13 +2149,13 @@ let evCategoryLastValue = '';
 function fillCategorySelect(catId) {
   const sel = document.getElementById('evCategory');
   if (!sel) return;
-  sel.innerHTML = '<option value="">(분류 없음)</option>' +
+  sel.innerHTML = `<option value="">${t('category.none')}</option>` +
     (state.categories || []).map(c =>
       `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)}</option>`
     ).join('') +
     // 🆕 v26.7.22 여기서 바로 카테고리를 만들 수 있게 (관리 모달로 연결).
     //   선택되면 값을 되돌리고 모달만 열기 — 실제 저장값이 되진 않음.
-    `<option value="${CAT_NEW_OPTION}">＋ 새 카테고리 만들기…</option>`;
+    `<option value="${CAT_NEW_OPTION}">${t('category.newOption')}</option>`;
   sel.value = categoryById(catId) ? catId : '';
   evCategoryLastValue = sel.value;
 }
@@ -2158,9 +2178,9 @@ function categoryLinkHint(catId) {
   if (state.googleAuthenticated    && findCalendarByName('google', cat.name))    linked.push('Google');
   if (state.nextcloudAuthenticated && findCalendarByName('nextcloud', cat.name)) linked.push('NextCloud');
   if (linked.length) {
-    return `🔗 ${linked.join(' · ')} 의 "${cat.name}" 캘린더와 연동됨 — 저장 위치를 바꾸면 그 캘린더로 들어갑니다.`;
+    return t('category.linkedFmt', { sources: linked.join(' · '), name: cat.name });
   }
-  return `"${cat.name}" 이름의 원격 캘린더가 없습니다. 원격으로 저장해도 분류(색)는 그대로 유지됩니다.`;
+  return t('category.notLinkedFmt', { name: cat.name });
 }
 
 /**
@@ -2224,7 +2244,7 @@ function syncWeeklyStartDay() {
     if (startDow != null && dow === startDow) {
       btn.classList.add('active');   // 시작일 요일은 항상 active
       btn.disabled = true;            //  + 못 끄게
-      btn.title = '시작일 요일 (자동)';
+      btn.title = t('account.startDowAutoTitle');
     } else {
       btn.disabled = false;
       btn.title = '';
@@ -2282,7 +2302,7 @@ function syncMonthlyStartOrdinal() {
     if (startOrd != null && ord === startOrd) {
       btn.classList.add('active');
       btn.disabled = true;
-      btn.title = '시작일 주차 (자동)';
+      btn.title = t('account.startOrdAutoTitle');
     } else {
       btn.disabled = false;
       btn.title = '';
@@ -2485,7 +2505,7 @@ function updateRecurrenceUiVisibility() {
     countInp.style.display = endType === 'count' ? '' : 'none';
     untilInp.style.display = endType === 'until' ? '' : 'none';
     const r = parseRrule(state.editingPreservedRrule);
-    hint.textContent = r ? `🔒 ${describeRrule(r)} (편집 미지원 패턴 — 원본 유지)` : '🔒 편집 미지원 패턴';
+    hint.textContent = r ? t('recurrence.unsupportedPatternWithDescFmt', { desc: describeRrule(r) }) : t('recurrence.unsupportedPatternLocked');
     return;
   }
   interval.style.display = '';
@@ -2510,7 +2530,7 @@ function updateRecurrenceUiVisibility() {
 
   // 힌트 텍스트
   const r = collectRecurrenceFromForm();
-  hint.textContent = r ? `→ ${describeRrule(r)}` : '';
+  hint.textContent = r ? t('recurrence.previewFmt', { desc: describeRrule(r) }) : '';
 }
 
 /**
@@ -2602,11 +2622,11 @@ function askRecurrenceScope(mode) {
   return new Promise(resolve => {
     const bg = document.getElementById('recScopeModalBg');
     document.getElementById('recScopeTitle').textContent =
-      mode === 'delete' ? '반복 일정 삭제' : '반복 일정 수정';
+      mode === 'delete' ? t('recScope.deleteTitle') : t('recScope.title');
     document.getElementById('recScopeMsg').textContent =
       mode === 'delete'
-        ? '이 반복 일정을 어떻게 삭제할까요?'
-        : '이 변경 사항을 어떻게 적용할까요?';
+        ? t('recScope.deleteMsg')
+        : t('recScope.msg');
 
     const handler = (ev) => {
       const btn = ev.target.closest('.rec-scope-btn');
@@ -2670,10 +2690,10 @@ function applyAndValidateEnd(data) {
   }
   // 검증: 종료 < 시작
   if (data.endDate < data.date) {
-    toast('종료일은 시작일과 같거나 그 이후여야 합니다'); return false;
+    toast(t('toast.endDateBeforeStart')); return false;
   }
   if (data.endDate === data.date && data.time && data.endTime && data.endTime < data.time) {
-    toast('종료시각은 시작시각과 같거나 그 이후여야 합니다'); return false;
+    toast(t('toast.endTimeBeforeStart')); return false;
   }
   return true;
 }
@@ -2685,7 +2705,7 @@ function applyAndValidateEnd(data) {
  */
 async function saveEvent() {
   const title = document.getElementById('evTitle').value.trim();
-  if (!title) { toast('제목을 입력하세요'); return; }
+  if (!title) { toast(t('toast.titleRequired')); return; }
 
   const time = document.getElementById('evTime').value;
 
@@ -2728,14 +2748,14 @@ async function saveEvent() {
       if (data.source === 'google')  data.googleCalendarId = match.id;
       else                           data.ncCalendarUrl    = match.url;
     } else if (cat) {
-      toast(`"${cat.name}" 캘린더가 없어 선택한 캘린더로 저장합니다 (분류는 유지)`, 3500);
+      toast(t('toast.categoryCalendarMissingFmt', { name: cat.name }), 3500);
     }
   }
 
   // 🆕 v26.5.8b 폼에서 RRULE 수집 + 로컬 또는 NextCloud 허용
   const formRrule = collectRecurrenceString();   // "" 또는 "FREQ=...;..."
   if (formRrule && data.source !== 'local' && data.source !== 'nextcloud') {
-    toast('반복 일정은 로컬 또는 NextCloud 만 지원합니다', 3500);
+    toast(t('toast.recurrenceLocalOrNcOnly'), 3500);
     data.source = 'local';
   }
 
@@ -2843,12 +2863,12 @@ async function saveEvent() {
 
       // ── 새 source로 push ──
       if (data.source === 'google' && isElectron && state.googleAuthenticated) {
-        toast('Google에 동기화 중...');
+        toast(t('toast.syncingGoogle'));
         const r = await window.electronAPI.pushGoogleEvent(merged);
         if (r.ok) merged = { ...merged, ...r.event };  // 서버 응답 메타데이터 흡수
-        else      toast('Google 푸시 실패: ' + r.error, 3500);
+        else      toast(t('toast.googlePushFail', { err: r.error }), 3500);
       } else if (data.source === 'nextcloud' && isElectron && state.nextcloudAuthenticated) {
-        toast('NextCloud에 동기화 중...');
+        toast(t('toast.syncingNextcloud'));
         // 🆕 v26.5.8b 자식 분리 인스턴스가 있으면 묶어서 push
         const detachedInstances = state.events.filter(e => e.recurrenceId === merged.id);
         const r = await window.electronAPI.pushNextcloudEvent(merged, { detachedInstances });
@@ -2862,7 +2882,7 @@ async function saveEvent() {
             child.ncCalendarUrl = r.event.ncCalendarUrl;
           }
         } else {
-          toast('NextCloud 푸시 실패: ' + r.error, 3500);
+          toast(t('toast.nextcloudPushFail', { err: r.error }), 3500);
         }
       }
 
@@ -2882,7 +2902,7 @@ async function saveEvent() {
       const newIdx = state.events.findIndex(e => e.id === editingId);
       if (newIdx >= 0) state.events[newIdx] = merged;
       else             state.events.push(merged);   // 이론상 발생 안 함 (마스터는 filter 에서 살아남음)
-      toast('수정되었습니다');
+      toast(t('toast.eventUpdated'));
 
     } else {
       // ═══════════════════════════════════════════════
@@ -2897,26 +2917,26 @@ async function saveEvent() {
       }
 
       if (data.source === 'google' && isElectron && state.googleAuthenticated) {
-        toast('Google에 동기화 중...');
+        toast(t('toast.syncingGoogle'));
         const r = await window.electronAPI.pushGoogleEvent(newEvent);
         if (r.ok) newEvent = r.event;       // 서버에서 부여한 googleId 등으로 교체
         else {
           // 푸시 실패 시 로컬로 폴백 저장 (네트워크 끊김 등)
-          toast('Google 푸시 실패, 로컬로 저장: ' + r.error, 3500);
+          toast(t('toast.googlePushFailFallback', { err: r.error }), 3500);
           newEvent.source = 'local';
         }
       } else if (data.source === 'nextcloud' && isElectron && state.nextcloudAuthenticated) {
-        toast('NextCloud에 동기화 중...');
+        toast(t('toast.syncingNextcloud'));
         const r = await window.electronAPI.pushNextcloudEvent(newEvent);
         if (r.ok) newEvent = r.event;
         else {
-          toast('NextCloud 푸시 실패, 로컬로 저장: ' + r.error, 3500);
+          toast(t('toast.nextcloudPushFailFallback', { err: r.error }), 3500);
           newEvent.source = 'local';
         }
       }
 
       state.events.push(newEvent);
-      toast(formRrule ? '반복 일정이 추가되었습니다' : '추가되었습니다');
+      toast(formRrule ? t('toast.recurringEventAdded') : t('toast.eventAdded'));
     }
 
     // 저장 + 모달 닫기 + 다시 그리기 (saveEvents 안에서 알람 재스케줄까지 함)
@@ -2945,10 +2965,10 @@ async function pushNcMasterWithInstances(master) {
   if (!master || master.source !== 'nextcloud') return { skipped: true };
 
   const detachedInstances = state.events.filter(e => e.recurrenceId === master.id);
-  toast('NextCloud에 동기화 중...');
+  toast(t('toast.syncingNextcloud'));
   const r = await window.electronAPI.pushNextcloudEvent(master, { detachedInstances });
   if (!r || !r.ok) {
-    toast('NextCloud 푸시 실패: ' + (r && r.error || 'unknown'), 3500);
+    toast(t('toast.nextcloudPushFail', { err: (r && r.error) || 'unknown' }), 3500);
     return r || { ok: false };
   }
 
@@ -2984,7 +3004,7 @@ async function saveRecurrenceEdit(ctx, formData, formRrule) {
 
   const masterIdx = state.events.findIndex(e => e.id === ctx.masterId);
   if (masterIdx < 0) {
-    toast('마스터 일정을 찾을 수 없습니다');
+    toast(t('toast.masterNotFound'));
     return false;
   }
   const master = state.events[masterIdx];
@@ -3043,7 +3063,7 @@ async function saveRecurrenceEdit(ctx, formData, formRrule) {
       }
     }
     affectedMasterIds.add(master.id);
-    toast('이 일정만 수정되었습니다');
+    toast(t('toast.singleEventUpdated'));
   }
 
   // ─────────────────────────────────────────────────────
@@ -3108,7 +3128,7 @@ async function saveRecurrenceEdit(ctx, formData, formRrule) {
 
     if (!masterRemoved) affectedMasterIds.add(master.id);
     affectedMasterIds.add(newMaster.id);
-    toast('이 날짜부터의 일정이 변경되었습니다');
+    toast(t('toast.futureEventsUpdated'));
   }
 
   // ─────────────────────────────────────────────────────
@@ -3143,7 +3163,7 @@ async function saveRecurrenceEdit(ctx, formData, formRrule) {
     if (newMasterIdx >= 0) state.events[newMasterIdx] = updated;
     else                   state.events.push(updated);   // 이론상 발생 안 함
     affectedMasterIds.add(master.id);
-    toast('시리즈 전체가 수정되었습니다');
+    toast(t('toast.allSeriesUpdated'));
   } else {
     return false;
   }
@@ -3173,7 +3193,7 @@ async function deleteEvent() {
 
     const masterIdx = state.events.findIndex(e => e.id === ctx.masterId);
     if (masterIdx < 0) {
-      toast('마스터 일정을 찾을 수 없습니다');
+      toast(t('toast.masterNotFound'));
       return;
     }
     const master = state.events[masterIdx];
@@ -3186,7 +3206,7 @@ async function deleteEvent() {
       if (!ctx.isVirtual) {
         state.events = state.events.filter(e => e.id !== state.editingEventId);
       }
-      toast('이 일정만 삭제되었습니다');
+      toast(t('toast.singleEventDeleted'));
       // 🆕 v26.5.8b NextCloud면 마스터 + 남은 자식들 묶어 push
       const m = state.events.find(e => e.id === master.id);
       if (m) await pushNcMasterWithInstances(m);
@@ -3214,7 +3234,7 @@ async function deleteEvent() {
         // originalStart >= ctx.instanceDate 이면 같이 제거
         return (e.originalStart || e.date) < ctx.instanceDate;
       });
-      toast('이 날짜부터의 일정이 삭제되었습니다');
+      toast(t('toast.futureEventsDeleted'));
       // 🆕 v26.5.8b 마스터가 살아있으면 push, 죽었으면 위에서 이미 deleteNextcloudEvent 호출됨
       if (!masterRemoved) {
         const m = state.events.find(e => e.id === master.id);
@@ -3229,7 +3249,7 @@ async function deleteEvent() {
       state.events = state.events.filter(e =>
         e.id !== master.id && e.recurrenceId !== master.id
       );
-      toast('시리즈 전체가 삭제되었습니다');
+      toast(t('toast.allSeriesDeleted'));
     }
 
     await saveEvents();
@@ -3239,20 +3259,20 @@ async function deleteEvent() {
   }
 
   // ── 일반 단일 일정 삭제 (기존 로직) ──
-  if (!confirm('이 일정을 삭제하시겠습니까?')) return;
+  if (!confirm(t('confirm.deleteEvent'))) return;
 
   const ev = state.events.find(e => e.id === state.editingEventId);
 
   // ── 원격 일정이면 서버에서도 삭제 ──
   if (ev && isElectron) {
     if (ev.source === 'google' && ev.googleId) {
-      toast('Google에서 삭제 중...');
+      toast(t('toast.deletingFromGoogle'));
       const r = await window.electronAPI.deleteGoogleEvent(ev);
-      if (!r.ok) toast('Google 삭제 실패: ' + r.error, 3500);
+      if (!r.ok) toast(t('toast.googleDeleteFail', { err: r.error }), 3500);
     } else if (ev.source === 'nextcloud' && ev.ncUrl) {
-      toast('NextCloud에서 삭제 중...');
+      toast(t('toast.deletingFromNextcloud'));
       const r = await window.electronAPI.deleteNextcloudEvent(ev);
-      if (!r.ok) toast('NextCloud 삭제 실패: ' + r.error, 3500);
+      if (!r.ok) toast(t('toast.nextcloudDeleteFail', { err: r.error }), 3500);
     }
   }
 
@@ -3272,7 +3292,7 @@ async function deleteEvent() {
   await saveEvents();
   closeEventModal();
   renderCalendar();
-  toast('삭제되었습니다');
+  toast(t('toast.eventDeleted'));
 }
 
 
@@ -3421,18 +3441,18 @@ async function refreshGoogleAuthStatus() {
     if (state.googleAuthenticated && state.googleEmail) {
       const count = state.googleSelectedCalendars.length;
       // 🆕 v26.0728.1 "연결됨"(상태 표시처럼 읽힘) → "동기화 설정"(클릭 가능함이 드러나게)
-      btn.textContent = count > 0 ? '동기화 설정' : '캘린더 선택';
+      btn.textContent = count > 0 ? t('account.syncSettingsBtn') : t('account.selectCalendarBtn');
       btn.classList.add('connected');
-      btn.title = `${state.googleEmail}\n캘린더 ${count}개 선택됨\n클릭하여 캘린더/기본 위치 설정`;
+      btn.title = t('account.googleTooltipFmt', { email: state.googleEmail, n: count });
       emailEl.textContent = count > 0
-        ? `${state.googleEmail} · 캘린더 ${count}개`
-        : `${state.googleEmail} (캘린더 미선택)`;
+        ? t('account.calendarCountFmt', { user: state.googleEmail, n: count })
+        : t('account.noCalendarFmt', { user: state.googleEmail });
       emailEl.classList.remove('disconnected');
     } else {
-      btn.textContent = '연결';
+      btn.textContent = t('settings.account.connect');
       btn.classList.remove('connected');
-      btn.title = 'Google 계정 연결';
-      emailEl.textContent = '미연결';
+      btn.title = t('account.googleConnectTitle');
+      emailEl.textContent = t('settings.account.disconnected');
       emailEl.classList.add('disconnected');
     }
     renderDefaultTargetLabel();   // 🆕 v26.5.9f
@@ -3480,22 +3500,22 @@ async function refreshNextcloudAuthStatus() {
     if (state.nextcloudAuthenticated) {
       const count = state.nextcloudSelectedCalendars.length;
       // 🆕 v26.0728.1 "연결됨"(상태 표시처럼 읽힘) → "동기화 설정"(클릭 가능함이 드러나게)
-      btn.textContent = '동기화 설정';
+      btn.textContent = t('account.syncSettingsBtn');
       btn.classList.add('connected');
-      btn.title = `${status.username} @ ${status.serverUrl}\n캘린더 ${count}개 선택됨\n클릭하여 캘린더/기본 위치 설정`;
-      lbl.textContent = `${status.username} · 캘린더 ${count}개`;
+      btn.title = t('account.nextcloudTooltipFmt', { user: status.username, server: status.serverUrl, n: count });
+      lbl.textContent = t('account.calendarCountFmt', { user: status.username, n: count });
       lbl.classList.remove('disconnected');
     } else if (status.authenticated) {
-      btn.textContent = '캘린더 선택';
+      btn.textContent = t('account.selectCalendarBtn');
       btn.classList.remove('connected');
-      btn.title = '동기화할 캘린더를 선택하세요';
-      lbl.textContent = `${status.username} (캘린더 미선택)`;
+      btn.title = t('account.nextcloudSelectCalendarTitle');
+      lbl.textContent = t('account.noCalendarFmt', { user: status.username });
       lbl.classList.add('disconnected');
     } else {
-      btn.textContent = '연결';
+      btn.textContent = t('settings.account.connect');
       btn.classList.remove('connected');
-      btn.title = 'NextCloud 계정 연결';
-      lbl.textContent = '미연결';
+      btn.title = t('account.nextcloudConnectTitle');
+      lbl.textContent = t('settings.account.disconnected');
       lbl.classList.add('disconnected');
     }
     renderDefaultTargetLabel();   // 🆕 v26.5.9f
@@ -3517,7 +3537,7 @@ async function refreshNextcloudAuthStatus() {
  */
 async function syncFromGoogle({ silent = false } = {}) {
   if (!isElectron || !state.googleAuthenticated) return;
-  if (!silent) toast('Google 동기화 중...');
+  if (!silent) toast(t('toast.syncingGoogle'));
 
   // ── Calendar 동기화 ──
   let calOk = false, calMsg = '';
@@ -3545,11 +3565,11 @@ async function syncFromGoogle({ silent = false } = {}) {
           else          state.events.push(g);    // 새로 추가
         });
       }
-      calMsg = `Calendar ${(r.events||[]).length}건`;
+      calMsg = t('toast.calendarCountFmt', { n: (r.events||[]).length });
     } else {
-      calMsg = 'Calendar 실패: ' + r.error;
+      calMsg = t('toast.calendarFailFmt', { err: r.error });
     }
-  } catch (e) { calMsg = 'Calendar 오류: ' + e.message; }
+  } catch (e) { calMsg = t('toast.calendarErrorFmt', { err: e.message }); }
 
   // ── Tasks 동기화 (위 Calendar와 동일한 패턴) ──
   let taskOk = false, taskMsg = '';
@@ -3570,11 +3590,11 @@ async function syncFromGoogle({ silent = false } = {}) {
           else          state.memos.push(g);
         });
       }
-      taskMsg = `Tasks ${(r.memos||[]).length}건`;
+      taskMsg = t('toast.tasksCountFmt', { n: (r.memos||[]).length });
     } else {
-      taskMsg = 'Tasks 실패: ' + r.error;
+      taskMsg = t('toast.tasksFailFmt', { err: r.error });
     }
-  } catch (e) { taskMsg = 'Tasks 오류: ' + e.message; }
+  } catch (e) { taskMsg = t('toast.tasksErrorFmt', { err: e.message }); }
 
   // 저장 + 다시 그리기
   await saveEvents();
@@ -3588,7 +3608,7 @@ async function syncFromGoogle({ silent = false } = {}) {
 
   // 결과 토스트
   if (!silent) {
-    if (calOk && taskOk) toast(`동기화 완료 · ${calMsg} · ${taskMsg}`);
+    if (calOk && taskOk) toast(t('toast.syncCompleteFmt', { a: calMsg, b: taskMsg }));
     else                 toast([calMsg, taskMsg].filter(Boolean).join(' / '), 3500);
   }
 }
@@ -3599,12 +3619,12 @@ async function syncFromGoogle({ silent = false } = {}) {
  */
 async function syncFromNextcloud({ silent = false } = {}) {
   if (!isElectron || !state.nextcloudAuthenticated) return;
-  if (!silent) toast('NextCloud 동기화 중...');
+  if (!silent) toast(t('toast.syncingNextcloud'));
 
   try {
     const r = await window.electronAPI.syncNextcloud();
     if (!r.ok) {
-      if (!silent) toast('NextCloud 실패: ' + r.error, 3500);
+      if (!silent) toast(t('toast.nextcloudFail', { err: r.error }), 3500);
       return;
     }
     if (r.isFull) {
@@ -3633,9 +3653,9 @@ async function syncFromNextcloud({ silent = false } = {}) {
     scheduleAlarms();
     // 🆕 동기화된 범위 기록
     updateSyncedRange('nextcloud', -7, 56);
-    if (!silent) toast(`NextCloud 동기화 완료 · ${(r.events || []).length}건`);
+    if (!silent) toast(t('toast.nextcloudSyncCompleteFmt', { n: (r.events || []).length }));
   } catch (e) {
-    if (!silent) toast('NextCloud 오류: ' + e.message, 3500);
+    if (!silent) toast(t('toast.nextcloudError', { err: e.message }), 3500);
   }
 }
 
@@ -3649,11 +3669,11 @@ async function syncFromNextcloud({ silent = false } = {}) {
  *  - 트레이 메뉴 "지금 동기화" (메인 → 'trigger-sync' 이벤트)
  */
 async function triggerSyncAll() {
-  if (!isElectron) { toast('Electron 환경에서만 동작합니다'); return; }
+  if (!isElectron) { toast(t('toast.electronOnly')); return; }
   const tasks = [];
   if (state.googleAuthenticated)    tasks.push(syncFromGoogle());
   if (state.nextcloudAuthenticated) tasks.push(syncFromNextcloud());
-  if (tasks.length === 0) { toast('연결된 계정이 없습니다'); return; }
+  if (tasks.length === 0) { toast(t('toast.noAccountConnected')); return; }
   await Promise.all(tasks);
 }
 
@@ -4133,16 +4153,86 @@ document.querySelectorAll('.layout-card').forEach(card => {
     state.layout = card.dataset.layout;
     applyLayout();
     await saveSettings();
-    const names = { uniform: '균일 모드', split: '주말 압축 모드', week: '주간 일정 모드' };
-    toast(names[state.layout] || '레이아웃 변경');
+    const names = { uniform: t('toast.layoutUniform'), split: t('toast.layoutSplit'), week: t('toast.layoutWeek') };
+    toast(names[state.layout] || t('toast.layoutChanged'));
   });
 });
 
 
-// ─── 설정 버튼 (⚙) → 설정 패널 토글 ───
+// ╔══════════════════════════════════════════════════════════════════╗
+// ║  ▼ 🆕 v26.0828.1 설정 모달 (드롭다운 패널 → 중앙 모달 + 좌측 탭 개편)  ║
+// ║                                                                  ║
+// ║  #settingsPanel 자체가 이제 .modal-bg 라 위치/배경은 그 CSS가 처리.   ║
+// ║  언어 드롭다운(select) 이 있으므로 다른 모달들처럼 modalAotBypass    ║
+// ║  로 alwaysOnTop 을 잠깐 풀어줘야 포커스/키보드 조작이 확실히 먹는다.   ║
+// ║  카테고리 관리 모달이 이 위에 겹쳐 열릴 수 있어 그 경우 bypass 유지.   ║
+// ╚══════════════════════════════════════════════════════════════════╝
+
+/** 설정 모달 열기 */
+function openSettingsModal() {
+  if (isElectron && window.electronAPI.modalAotBypass) {
+    window.electronAPI.modalAotBypass(true).catch(() => {});
+  }
+  document.getElementById('settingsPanel').classList.add('show');
+}
+
+/** 설정 모달 닫기. 이미 닫혀있으면 아무것도 안 함(다른 곳 클릭할 때마다 방어적으로
+ *  호출되므로, 매번 IPC 를 부르지 않게 guard). */
+function closeSettingsModal() {
+  const panel = document.getElementById('settingsPanel');
+  if (!panel.classList.contains('show')) return;
+  panel.classList.remove('show');
+  if (isElectron && window.electronAPI.modalAotBypass) {
+    // 카테고리 관리 모달이 이 위에서 열려있으면 bypass 유지 (그쪽이 닫힐 때 최종 복원)
+    const keepBypass = document.getElementById('catModalBg').classList.contains('show');
+    window.electronAPI.modalAotBypass(keepBypass).catch(() => {});
+  }
+}
+
+// ─── 설정 버튼 (⚙) → 설정 모달 열기/닫기 ───
 document.getElementById('settingsBtn').addEventListener('click', e => {
   e.stopPropagation();   // document 클릭 핸들러로 전파 방지 (열자마자 닫히지 않게)
-  document.getElementById('settingsPanel').classList.toggle('show');
+  const panel = document.getElementById('settingsPanel');
+  if (panel.classList.contains('show')) closeSettingsModal();
+  else                                  openSettingsModal();
+});
+
+// ─── ✕ 닫기 버튼 ───
+document.getElementById('settingsCloseBtn').addEventListener('click', closeSettingsModal);
+
+// ─── 좌측 탭 클릭 → 해당 pane 만 보이게 ───
+document.querySelectorAll('.settings-tab').forEach(tabBtn => {
+  tabBtn.addEventListener('click', () => {
+    const name = tabBtn.dataset.tab;
+    document.querySelectorAll('.settings-tab').forEach(b => b.classList.toggle('active', b === tabBtn));
+    document.querySelectorAll('.settings-pane').forEach(p => p.classList.toggle('active', p.dataset.pane === name));
+  });
+});
+
+/** 🆕 언어 드롭다운을 LANGUAGE_LIST로 채우고 현재 언어를 선택해둠. 부팅 시 1회 호출. */
+function initLanguageSelect() {
+  const sel = document.getElementById('languageSelect');
+  if (!sel || !window.LANGUAGE_LIST) return;
+  sel.innerHTML = window.LANGUAGE_LIST.map(l =>
+    `<option value="${l.code}">${escapeHtml(l.label)}</option>`
+  ).join('');
+  sel.value = state.language;
+}
+
+// ─── 언어 변경 → 화면 즉시 반영 + 저장 ───
+document.getElementById('languageSelect').addEventListener('change', async (e) => {
+  state.language = e.target.value;
+  await saveSettings();
+  window.setLanguage(state.language);   // currentLang 갱신 + data-i18n 정적 텍스트 적용
+  applyLocaleArrays();                  // MONTHS/DOW 갱신
+
+  // data-i18n 이 안 붙은(JS가 매번 다시 그리는) 동적 텍스트들도 새 언어로 재생성
+  renderCalendar();
+  renderMemos();
+  renderCategorySummary();
+  renderDefaultTargetLabel();
+  await refreshGoogleAuthStatus();
+  await refreshNextcloudAuthStatus();
 });
 
 
@@ -4163,7 +4253,7 @@ document.getElementById('eventWrapToggle').addEventListener('change', async e =>
   state.eventWrap = e.target.checked;
   applyEventWrap();
   await saveSettings();
-  toast(state.eventWrap ? '일정 제목 여러 줄 표시 ON' : '일정 제목 한 줄 표시');
+  toast(state.eventWrap ? t('toast.eventWrapOn') : t('toast.eventWrapOff'));
 });
 
 // 🆕 v26.5.9b 테마 토글 (Light / Dark) — 클릭 시 즉시 적용 + 캘린더 재렌더 (이벤트 칩 색 갱신)
@@ -4202,7 +4292,7 @@ document.getElementById('googleAuthBtn').addEventListener('click', async (e) => 
   e.stopPropagation();
   // 🆕 v26.5.7-fix: 다른 모달 정리 (z-index 충돌 방지)
   closeAllCalendarModals();
-  if (!isElectron) { toast('Electron 환경에서만 동작합니다'); return; }
+  if (!isElectron) { toast(t('toast.electronOnly')); return; }
 
   const btn = e.target;
   const status = await window.electronAPI.authGoogleStatus();
@@ -4213,20 +4303,20 @@ document.getElementById('googleAuthBtn').addEventListener('click', async (e) => 
   } else {
     // ─── 미연결 → OAuth 시작 ───
     btn.disabled = true;
-    btn.textContent = '인증 중...';
-    toast('브라우저에서 Google 로그인을 진행하세요');
+    btn.textContent = t('account.authenticatingBtn');
+    toast(t('toast.googleLoginInBrowser'));
     try {
       const result = await window.electronAPI.authGoogle();
       if (result.ok) {
-        toast(`연결됨: ${result.email}`);
+        toast(t('toast.googleConnectedFmt', { email: result.email }));
         await refreshGoogleAuthStatus();
         // 인증 직후 캘린더 선택 모달 자동 오픈
         await openGoogleCalendarSelectModal();
       } else {
-        toast('연결 실패: ' + result.error, 4000);
+        toast(t('toast.googleConnectFail', { err: result.error }), 4000);
       }
     } catch (err) {
-      toast('연결 실패: ' + err.message, 4000);
+      toast(t('toast.googleConnectFail', { err: err.message }), 4000);
     } finally {
       btn.disabled = false;
       await refreshGoogleAuthStatus();
@@ -4268,7 +4358,7 @@ async function openGoogleCalendarSelectModal() {
     if (r.ok) {
       allCals = r.calendars || [];
     } else {
-      listError = r.error || '알 수 없는 오류';
+      listError = r.error || t('err.unknown');
     }
   } catch (err) {
     listError = err.message || String(err);
@@ -4320,15 +4410,13 @@ function renderGcalList(listError) {
   if (listError) {
     errorBox = `
       <div class="cal-select-error">
-        ⚠ 캘린더 목록을 가져올 수 없습니다.<br>
-        <small>${escapeHtml(listError)}</small><br>
-        <small style="opacity:0.8">권한이 부족하거나 네트워크 문제일 수 있습니다. 아래 <b>연결 해제</b> 후 다시 연결해보세요.</small>
+        ${t('cal.fetchErrorHtml', { msg: escapeHtml(listError) })}
       </div>
     `;
   }
 
   if (gcalDraft.length === 0) {
-    list.innerHTML = errorBox + '<div class="cal-select-empty">사용 가능한 캘린더가 없습니다</div>';
+    list.innerHTML = errorBox + `<div class="cal-select-empty">${t('cal.empty')}</div>`;
     return;
   }
 
@@ -4337,13 +4425,13 @@ function renderGcalList(listError) {
     return `
     <div class="cal-select-item" data-idx="${i}">
       <input type="checkbox" class="cal-check" ${c._checked ? 'checked' : ''}>
-      <input type="color" class="cal-color-input" value="${escapeHtml(c.customColor)}" title="클릭하여 색상 변경">
+      <input type="color" class="cal-color-input" value="${escapeHtml(c.customColor)}" title="${t('cal.colorChangeTitle')}">
       <span class="cal-name">${escapeHtml(calDisplayName(c, 'google'))}</span>
-      <button class="cal-color-reset" title="원래 Google 색상으로 복원">↺</button>
-      <button class="cal-star ${c.isPrimary ? 'active' : ''}" title="이 source 의 대표 캘린더로 지정">
+      <button class="cal-color-reset" title="${t('cal.colorResetTitle')}">↺</button>
+      <button class="cal-star ${c.isPrimary ? 'active' : ''}" title="${t('cal.starPrimaryTitle')}">
         ${c.isPrimary ? '⭐' : '☆'}
       </button>
-      <button class="cal-default-star ${isDefault ? 'active' : ''}" title="새 일정의 전체 기본 위치로 지정 (3개 source 통합)">
+      <button class="cal-default-star ${isDefault ? 'active' : ''}" title="${t('cal.starDefaultTitle')}">
         ${isDefault ? '★' : '☆'}
       </button>
     </div>
@@ -4387,7 +4475,7 @@ function renderGcalList(listError) {
       e.stopPropagation();
       const item = star.closest('.cal-select-item');
       const i = parseInt(item.dataset.idx, 10);
-      if (!gcalDraft[i]._checked) { toast('먼저 체크해주세요'); return; }
+      if (!gcalDraft[i]._checked) { toast(t('toast.checkFirst')); return; }
       gcalDraft.forEach(x => x.isPrimary = false);
       gcalDraft[i].isPrimary = true;
       renderGcalList(listError);
@@ -4400,7 +4488,7 @@ function renderGcalList(listError) {
       e.stopPropagation();
       const item = star.closest('.cal-select-item');
       const i = parseInt(item.dataset.idx, 10);
-      if (!gcalDraft[i]._checked) { toast('먼저 체크해주세요'); return; }
+      if (!gcalDraft[i]._checked) { toast(t('toast.checkFirst')); return; }
       const wasDefault = isDefaultTarget('google', gcalDraft[i].id);
       await setDefaultTarget(wasDefault ? null : 'google', gcalDraft[i].id);
       renderGcalList(listError);
@@ -4428,13 +4516,13 @@ document.getElementById('gcalSave').addEventListener('click', async () => {
     && picked.every(p => oldList.some(o => o.id === p.id && o.isPrimary === p.isPrimary));
 
   if (picked.length === 0) {
-    if (!confirm('선택된 캘린더가 없습니다. 모든 Google 일정이 화면에서 사라집니다. 계속할까요?')) return;
+    if (!confirm(t('confirm.googleNoSelection'))) return;
   }
 
   await window.electronAPI.googleSetSelectedCalendars(picked);
   closeGcalModal();
   await refreshGoogleAuthStatus();   // calendarColors 캐시 재빌드
-  toast(`Google 캘린더 ${picked.length}개 저장됨`);
+  toast(t('toast.googleCalendarsSavedFmt', { n: picked.length }));
 
   renderCalendar();   // 🆕 색상 즉시 반영
 
@@ -4449,7 +4537,7 @@ document.getElementById('gcalSave').addEventListener('click', async () => {
 
 // 연결 해제 링크
 document.getElementById('gcalRevoke').addEventListener('click', async () => {
-  if (!confirm('Google 연결을 해제하시겠습니까?\n가져온 Google 일정과 Tasks도 함께 제거됩니다.')) return;
+  if (!confirm(t('confirm.googleDisconnect'))) return;
   try {
     await window.electronAPI.authGoogleRevoke();
     state.events = state.events.filter(e => e.source !== 'google');
@@ -4462,9 +4550,9 @@ document.getElementById('gcalRevoke').addEventListener('click', async () => {
     closeGcalModal();
     renderCalendar();
     renderMemos();
-    toast('연결 해제됨');
+    toast(t('toast.googleDisconnected'));
   } catch (err) {
-    toast('해제 실패: ' + err.message);
+    toast(t('toast.disconnectFail', { err: err.message }));
   } finally {
     await refreshGoogleAuthStatus();
   }
@@ -4519,8 +4607,11 @@ function closeCategoryModal() {
     // 🆕 v26.7.22 일정 모달 위에서 열렸으면 AOT 를 복원하면 안 됨 —
     //   복원해버리면 아직 떠있는 일정 모달의 텍스트 입력이 먹통이 된다.
     //   (bypass(true) 를 다시 걸어 포커스도 일정 모달로 돌려줌)
-    const keepBypass = catOpenedFromEventModal &&
-      document.getElementById('eventModalBg').classList.contains('show');
+    // 🆕 v26.0828.1 설정 모달의 "관리" 버튼으로 열렸을 때도 마찬가지 —
+    //   설정 모달이 아직 떠있으면 bypass 를 풀면 안 됨.
+    const keepBypass =
+      (catOpenedFromEventModal && document.getElementById('eventModalBg').classList.contains('show')) ||
+      document.getElementById('settingsPanel').classList.contains('show');
     window.electronAPI.modalAotBypass(keepBypass).catch(() => {});
   }
   catOpenedFromEventModal = false;
@@ -4553,19 +4644,16 @@ function renderCatList() {
   const noneIsDefault = isDefaultTarget('local', null);
   let html = `
     <div class="cal-select-item cat-none-row">
-      <span class="cat-none-swatch" title="분류 없음"></span>
-      <span class="cat-none-label">(분류 없음)</span>
-      <button class="cal-default-star cat-none-star ${noneIsDefault ? 'active' : ''}" title="새 일정의 전체 기본 위치로 지정">
+      <span class="cat-none-swatch" title="${t('cat.noneSwatchTitle')}"></span>
+      <span class="cat-none-label">${t('category.none')}</span>
+      <button class="cal-default-star cat-none-star ${noneIsDefault ? 'active' : ''}" title="${t('cat.starTitleNone')}">
         ${noneIsDefault ? '★' : '☆'}
       </button>
     </div>
   `;
 
   if (catDraft.length === 0) {
-    html += '<div class="cal-select-empty">' +
-      '카테고리가 없습니다 — 모든 로컬 일정이 <b>(분류 없음)</b> 으로 저장됩니다.<br>' +
-      '아래 <b>＋ 카테고리 추가</b> 로 이름과 색을 직접 만드세요.' +
-      '</div>';
+    html += `<div class="cal-select-empty">${t('cat.emptyHtml')}</div>`;
     list.innerHTML = html;
     wireCatNoneStar(list);
     return;
@@ -4577,19 +4665,19 @@ function renderCatList() {
     if (state.googleAuthenticated    && findCalendarByName('google', c.name))    linked.push('G');
     if (state.nextcloudAuthenticated && findCalendarByName('nextcloud', c.name)) linked.push('NC');
     const badge = linked.length
-      ? `<span class="cat-link-badge linked" title="같은 이름의 원격 캘린더와 연동됨">🔗 ${linked.join('·')}</span>`
-      : `<span class="cat-link-badge unlinked" title="같은 이름의 원격 캘린더 없음 (로컬 전용)">로컬</span>`;
+      ? `<span class="cat-link-badge linked" title="${t('cat.linkedBadgeTitle')}">🔗 ${linked.join('·')}</span>`
+      : `<span class="cat-link-badge unlinked" title="${t('cat.unlinkedBadgeTitle')}">${t('cat.unlinkedBadgeLabel')}</span>`;
     const isDefault = isDefaultTarget('local', c.id);
 
     return `
     <div class="cal-select-item" data-idx="${i}">
-      <input type="color" class="cal-color-input" value="${escapeHtml(c.color)}" title="클릭하여 색상 변경">
-      <input type="text" class="cat-name-input" value="${escapeHtml(c.name)}" placeholder="카테고리 이름" maxlength="24">
+      <input type="color" class="cal-color-input" value="${escapeHtml(c.color)}" title="${t('cal.colorChangeTitle')}">
+      <input type="text" class="cat-name-input" value="${escapeHtml(c.name)}" placeholder="${t('cat.namePlaceholder')}" maxlength="24">
       ${badge}
-      <button class="cal-default-star" title="새 일정의 전체 기본 위치로 지정 (먼저 저장 필요)">
+      <button class="cal-default-star" title="${t('cat.starTitleRow')}">
         ${isDefault ? '★' : '☆'}
       </button>
-      <button class="cat-delete" title="삭제">✕</button>
+      <button class="cat-delete" title="${t('btn.delete')}">✕</button>
     </div>
   `;
   }).join('');
@@ -4622,7 +4710,7 @@ function renderCatList() {
       e.stopPropagation();
       const i = parseInt(star.closest('.cal-select-item').dataset.idx, 10);
       const cat = catDraft[i];
-      if (!categoryById(cat.id)) { toast('먼저 저장한 뒤 기본 위치로 지정할 수 있어요'); return; }
+      if (!categoryById(cat.id)) { toast(t('toast.categorySaveFirst')); return; }
       const wasDefault = isDefaultTarget('local', cat.id);
       await setDefaultTarget(wasDefault ? null : 'local', wasDefault ? null : cat.id);
       renderCatList();
@@ -4636,8 +4724,8 @@ function renderCatList() {
       const cat = catDraft[i];
       const used = state.events.filter(e => e.categoryId === cat.id).length;
       const msg = used > 0
-        ? `"${cat.name}" 카테고리를 삭제할까요?\n이 카테고리를 쓰는 일정 ${used}개는 "분류 없음"이 됩니다. (일정 자체는 삭제되지 않습니다)`
-        : `"${cat.name}" 카테고리를 삭제할까요?`;
+        ? t('cat.deleteConfirmUsedFmt', { name: cat.name, n: used })
+        : t('confirm.categoryDeleteFmt', { name: cat.name });
       if (!confirm(msg)) return;
       catDraft.splice(i, 1);
       renderCatList();
@@ -4680,7 +4768,7 @@ document.getElementById('catSave').addEventListener('click', async () => {
   const seen = new Set();
   for (const c of cleaned) {
     const k = normCatName(c.name);
-    if (seen.has(k)) { toast(`카테고리 이름이 중복됩니다: "${c.name}"`, 3500); return; }
+    if (seen.has(k)) { toast(t('toast.categoryNameDuplicateFmt', { name: c.name }), 3500); return; }
     seen.add(k);
   }
 
@@ -4709,7 +4797,7 @@ document.getElementById('catSave').addEventListener('click', async () => {
     if (hint) hint.textContent = categoryLinkHint(document.getElementById('evCategory').value);
   }
 
-  toast(cleaned.length === 0 ? '카테고리를 모두 비웠습니다' : `카테고리 ${cleaned.length}개 저장됨`);
+  toast(cleaned.length === 0 ? t('toast.categoriesClearedAll') : t('toast.categoriesSavedFmt', { n: cleaned.length }));
 });
 
 /** 설정 패널의 카테고리 요약 라벨 갱신 ("업무 · 개인 · 가족") */
@@ -4718,8 +4806,8 @@ function renderCategorySummary() {
   if (!el) return;
   const cats = state.categories || [];
   el.textContent = cats.length === 0
-    ? '(분류 없음)'
-    : cats.slice(0, 3).map(c => c.name).join(' · ') + (cats.length > 3 ? ` 외 ${cats.length - 3}개` : '');
+    ? t('category.none')
+    : cats.slice(0, 3).map(c => c.name).join(' · ') + (cats.length > 3 ? t('category.summaryMoreFmt', { n: cats.length - 3 }) : '');
 }
 
 document.getElementById('categoryManageBtn').addEventListener('click', e => {
@@ -4789,7 +4877,7 @@ document.getElementById('ncCancel2').addEventListener('click', closeNcModal);
 //  - 연결됨: 관리 모달 (재선택 또는 연결 해제)
 document.getElementById('nextcloudAuthBtn').addEventListener('click', async (e) => {
   e.stopPropagation();
-  if (!isElectron) { toast('Electron 환경에서만 동작합니다'); return; }
+  if (!isElectron) { toast(t('toast.electronOnly')); return; }
 
   // 🆕 v26.5.7-fix: 다른 모달 정리 (z-index 충돌 방지)
   closeAllCalendarModals();
@@ -4816,17 +4904,17 @@ document.getElementById('ncConnect').addEventListener('click', async () => {
   const password  = document.getElementById('ncPass').value;
 
   if (!serverUrl || !username || !password) {
-    toast('모든 필드를 입력하세요');
+    toast(t('toast.fieldsRequired'));
     return;
   }
 
   const btn = document.getElementById('ncConnect');
   btn.disabled = true;
-  btn.textContent = '연결 중...';
+  btn.textContent = t('account.connectingBtn');
   try {
     const r = await window.electronAPI.authNextcloud({ serverUrl, username, password });
     if (!r.ok) {
-      toast('연결 실패: ' + r.error, 4000);
+      toast(t('toast.googleConnectFail', { err: r.error }), 4000);
       return;
     }
     // 인증 성공 → step2로 (멀티셀렉 캘린더 목록)
@@ -4834,10 +4922,10 @@ document.getElementById('ncConnect').addEventListener('click', async () => {
     renderNcCalendarsMulti();
     openNcModal(false);
   } catch (err) {
-    toast('연결 실패: ' + err.message, 4000);
+    toast(t('toast.googleConnectFail', { err: err.message }), 4000);
   } finally {
     btn.disabled = false;
-    btn.textContent = '연결';
+    btn.textContent = t('settings.account.connect');
   }
 });
 
@@ -4859,7 +4947,7 @@ function initNcStep2Draft(calendars) {
 function renderNcCalendarsMulti() {
   const list = document.getElementById('ncCalendars');
   if (ncStep2Draft.length === 0) {
-    list.innerHTML = '<div class="cal-select-empty">사용 가능한 캘린더가 없습니다</div>';
+    list.innerHTML = `<div class="cal-select-empty">${t('cal.empty')}</div>`;
     return;
   }
 
@@ -4870,10 +4958,10 @@ function renderNcCalendarsMulti() {
       <input type="checkbox" class="cal-check" ${c._checked ? 'checked' : ''}>
       <span class="cal-color-dot" style="background:#0082c9"></span>
       <span class="cal-name">${escapeHtml(calDisplayName(c, 'nextcloud'))}</span>
-      <button class="cal-star ${c.isPrimary ? 'active' : ''}" title="이 source 의 대표 캘린더로 지정">
+      <button class="cal-star ${c.isPrimary ? 'active' : ''}" title="${t('cal.starPrimaryTitle')}">
         ${c.isPrimary ? '⭐' : '☆'}
       </button>
-      <button class="cal-default-star ${isDefault ? 'active' : ''}" title="새 일정의 전체 기본 위치로 지정 (3개 source 통합)">
+      <button class="cal-default-star ${isDefault ? 'active' : ''}" title="${t('cal.starDefaultTitle')}">
         ${isDefault ? '★' : '☆'}
       </button>
     </div>
@@ -4902,7 +4990,7 @@ function renderNcCalendarsMulti() {
     star.addEventListener('click', e => {
       e.stopPropagation();
       const i = parseInt(star.closest('.cal-select-item').dataset.idx, 10);
-      if (!ncStep2Draft[i]._checked) { toast('먼저 체크해주세요'); return; }
+      if (!ncStep2Draft[i]._checked) { toast(t('toast.checkFirst')); return; }
       ncStep2Draft.forEach(x => x.isPrimary = false);
       ncStep2Draft[i].isPrimary = true;
       renderNcCalendarsMulti();
@@ -4914,7 +5002,7 @@ function renderNcCalendarsMulti() {
     star.addEventListener('click', async e => {
       e.stopPropagation();
       const i = parseInt(star.closest('.cal-select-item').dataset.idx, 10);
-      if (!ncStep2Draft[i]._checked) { toast('먼저 체크해주세요'); return; }
+      if (!ncStep2Draft[i]._checked) { toast(t('toast.checkFirst')); return; }
       const wasDefault = isDefaultTarget('nextcloud', ncStep2Draft[i].url);
       await setDefaultTarget(wasDefault ? null : 'nextcloud', ncStep2Draft[i].url);
       renderNcCalendarsMulti();
@@ -4931,11 +5019,11 @@ document.getElementById('ncSelectDone').addEventListener('click', async () => {
     isPrimary: c.isPrimary
   }));
 
-  if (picked.length === 0) { toast('최소 한 개 이상 선택하세요'); return; }
+  if (picked.length === 0) { toast(t('toast.selectAtLeastOne')); return; }
 
   await window.electronAPI.nextcloudSetSelectedCalendars(picked);
   closeNcModal();
-  toast(`NextCloud 캘린더 ${picked.length}개 선택됨`);
+  toast(t('toast.nextcloudCalendarsSelectedFmt', { n: picked.length }));
   await refreshNextcloudAuthStatus();
   setTimeout(() => syncFromNextcloud(), 500);
 });
@@ -4961,7 +5049,7 @@ async function openNextcloudManageModal() {
     if (r.ok) {
       allCals = r.calendars || [];
     } else {
-      listError = r.error || '알 수 없는 오류';
+      listError = r.error || t('err.unknown');
     }
   } catch (err) {
     listError = err.message || String(err);
@@ -5005,15 +5093,13 @@ function renderNcManageList(listError) {
   if (listError) {
     errorBox = `
       <div class="cal-select-error">
-        ⚠ 캘린더 목록을 가져올 수 없습니다.<br>
-        <small>${escapeHtml(listError)}</small><br>
-        <small style="opacity:0.8">서버가 응답하지 않거나 비밀번호가 만료됐을 수 있습니다. 아래 <b>연결 해제</b> 후 다시 연결해보세요.</small>
+        ${t('cal.fetchErrorNcHtml', { msg: escapeHtml(listError) })}
       </div>
     `;
   }
 
   if (ncManageDraft.length === 0) {
-    list.innerHTML = errorBox + '<div class="cal-select-empty">사용 가능한 캘린더가 없습니다</div>';
+    list.innerHTML = errorBox + `<div class="cal-select-empty">${t('cal.empty')}</div>`;
     return;
   }
 
@@ -5022,13 +5108,13 @@ function renderNcManageList(listError) {
     return `
     <div class="cal-select-item" data-idx="${i}">
       <input type="checkbox" class="cal-check" ${c._checked ? 'checked' : ''}>
-      <input type="color" class="cal-color-input" value="${escapeHtml(c.customColor)}" title="클릭하여 색상 변경">
+      <input type="color" class="cal-color-input" value="${escapeHtml(c.customColor)}" title="${t('cal.colorChangeTitle')}">
       <span class="cal-name">${escapeHtml(calDisplayName(c, 'nextcloud'))}</span>
-      <button class="cal-color-reset" title="기본 색상(#0082c9)으로 복원">↺</button>
-      <button class="cal-star ${c.isPrimary ? 'active' : ''}" title="이 source 의 대표 캘린더로 지정">
+      <button class="cal-color-reset" title="${t('cal.colorResetTitleNc')}">↺</button>
+      <button class="cal-star ${c.isPrimary ? 'active' : ''}" title="${t('cal.starPrimaryTitle')}">
         ${c.isPrimary ? '⭐' : '☆'}
       </button>
-      <button class="cal-default-star ${isDefault ? 'active' : ''}" title="새 일정의 전체 기본 위치로 지정 (3개 source 통합)">
+      <button class="cal-default-star ${isDefault ? 'active' : ''}" title="${t('cal.starDefaultTitle')}">
         ${isDefault ? '★' : '☆'}
       </button>
     </div>
@@ -5071,7 +5157,7 @@ function renderNcManageList(listError) {
     star.addEventListener('click', e => {
       e.stopPropagation();
       const i = parseInt(star.closest('.cal-select-item').dataset.idx, 10);
-      if (!ncManageDraft[i]._checked) { toast('먼저 체크해주세요'); return; }
+      if (!ncManageDraft[i]._checked) { toast(t('toast.checkFirst')); return; }
       ncManageDraft.forEach(x => x.isPrimary = false);
       ncManageDraft[i].isPrimary = true;
       renderNcManageList(listError);
@@ -5083,7 +5169,7 @@ function renderNcManageList(listError) {
     star.addEventListener('click', async e => {
       e.stopPropagation();
       const i = parseInt(star.closest('.cal-select-item').dataset.idx, 10);
-      if (!ncManageDraft[i]._checked) { toast('먼저 체크해주세요'); return; }
+      if (!ncManageDraft[i]._checked) { toast(t('toast.checkFirst')); return; }
       const wasDefault = isDefaultTarget('nextcloud', ncManageDraft[i].url);
       await setDefaultTarget(wasDefault ? null : 'nextcloud', ncManageDraft[i].url);
       renderNcManageList(listError);
@@ -5111,13 +5197,13 @@ document.getElementById('ncManageSave').addEventListener('click', async () => {
     && picked.every(p => oldList.some(o => o.url === p.url && o.isPrimary === p.isPrimary));
 
   if (picked.length === 0) {
-    if (!confirm('선택된 캘린더가 없습니다. 모든 NextCloud 일정이 화면에서 사라집니다. 계속할까요?')) return;
+    if (!confirm(t('confirm.nextcloudNoSelection'))) return;
   }
 
   await window.electronAPI.nextcloudSetSelectedCalendars(picked);
   closeNcManageModal();
   await refreshNextcloudAuthStatus();
-  toast(`NextCloud 캘린더 ${picked.length}개 저장됨`);
+  toast(t('toast.nextcloudCalendarsSavedFmt', { n: picked.length }));
 
   renderCalendar();   // 🆕 색상 즉시 반영
 
@@ -5129,136 +5215,8 @@ document.getElementById('ncManageSave').addEventListener('click', async () => {
   }
 });
 
-function closeNcManageModal() {
-  ncManageModalBg.classList.remove('show');
-  ncManageDraft = [];
-}
-
-function renderNcManageList(listError) {
-  const list = document.getElementById('ncManageList');
-
-  let errorBox = '';
-  if (listError) {
-    errorBox = `
-      <div class="cal-select-error">
-        ⚠ 캘린더 목록을 가져올 수 없습니다.<br>
-        <small>${escapeHtml(listError)}</small><br>
-        <small style="opacity:0.8">서버가 응답하지 않거나 비밀번호가 만료됐을 수 있습니다. 아래 <b>연결 해제</b> 후 다시 연결해보세요.</small>
-      </div>
-    `;
-  }
-
-  if (ncManageDraft.length === 0) {
-    list.innerHTML = errorBox + '<div class="cal-select-empty">사용 가능한 캘린더가 없습니다</div>';
-    return;
-  }
-
-  list.innerHTML = errorBox + ncManageDraft.map((c, i) => {
-    const isDefault = isDefaultTarget('nextcloud', c.url);   // 🆕 v26.5.9f
-    return `
-    <div class="cal-select-item" data-idx="${i}">
-      <input type="checkbox" class="cal-check" ${c._checked ? 'checked' : ''}>
-      <input type="color" class="cal-color-input" value="${escapeHtml(c.customColor)}" title="클릭하여 색상 변경">
-      <span class="cal-name">${escapeHtml(calDisplayName(c, 'nextcloud'))}</span>
-      <button class="cal-color-reset" title="기본 색상(#0082c9)으로 복원">↺</button>
-      <button class="cal-star ${c.isPrimary ? 'active' : ''}" title="이 source 의 대표 캘린더로 지정">
-        ${c.isPrimary ? '⭐' : '☆'}
-      </button>
-      <button class="cal-default-star ${isDefault ? 'active' : ''}" title="새 일정의 전체 기본 위치로 지정 (3개 source 통합)">
-        ${isDefault ? '★' : '☆'}
-      </button>
-    </div>
-  `;
-  }).join('');
-
-  list.querySelectorAll('.cal-check').forEach(cb => {
-    cb.addEventListener('change', () => {
-      const i = parseInt(cb.closest('.cal-select-item').dataset.idx, 10);
-      ncManageDraft[i]._checked = cb.checked;
-      if (!cb.checked && ncManageDraft[i].isPrimary) {
-        ncManageDraft[i].isPrimary = false;
-        const next = ncManageDraft.find(x => x._checked);
-        if (next) next.isPrimary = true;
-      }
-      renderNcManageList(listError);
-    });
-  });
-
-  // 🆕 색상 input
-  list.querySelectorAll('.cal-color-input').forEach(inp => {
-    inp.addEventListener('input', () => {
-      const i = parseInt(inp.closest('.cal-select-item').dataset.idx, 10);
-      ncManageDraft[i].customColor = inp.value;
-    });
-  });
-
-  // 🆕 색상 리셋
-  list.querySelectorAll('.cal-color-reset').forEach(btn => {
-    btn.addEventListener('click', e => {
-      e.stopPropagation();
-      const i = parseInt(btn.closest('.cal-select-item').dataset.idx, 10);
-      ncManageDraft[i].customColor = '#0082c9';
-      renderNcManageList(listError);
-    });
-  });
-
-  list.querySelectorAll('.cal-star').forEach(star => {
-    star.addEventListener('click', e => {
-      e.stopPropagation();
-      const i = parseInt(star.closest('.cal-select-item').dataset.idx, 10);
-      if (!ncManageDraft[i]._checked) { toast('먼저 체크해주세요'); return; }
-      ncManageDraft.forEach(x => x.isPrimary = false);
-      ncManageDraft[i].isPrimary = true;
-      renderNcManageList(listError);
-    });
-  });
-
-  // 🆕 v26.5.9f 주황 별표 — 새 일정의 전체 기본 위치 (3 source 통합 단일).
-  list.querySelectorAll('.cal-default-star').forEach(star => {
-    star.addEventListener('click', async e => {
-      e.stopPropagation();
-      const i = parseInt(star.closest('.cal-select-item').dataset.idx, 10);
-      if (!ncManageDraft[i]._checked) { toast('먼저 체크해주세요'); return; }
-      const wasDefault = isDefaultTarget('nextcloud', ncManageDraft[i].url);
-      await setDefaultTarget(wasDefault ? null : 'nextcloud', ncManageDraft[i].url);
-      renderNcManageList(listError);
-    });
-  });
-}
-
-ncManageModalBg.addEventListener('click', e => {
-  if (e.target.id === 'ncManageModalBg') closeNcManageModal();
-});
-document.getElementById('ncManageCancel').addEventListener('click', closeNcManageModal);
-
-document.getElementById('ncManageSave').addEventListener('click', async () => {
-  const picked = ncManageDraft.filter(c => c._checked).map(c => ({
-    url: c.url,
-    displayName: calDisplayName(c, 'nextcloud'),
-    customColor: c.customColor,    // 🆕
-    isPrimary: c.isPrimary
-  }));
-
-  if (picked.length === 0) {
-    if (!confirm('선택된 캘린더가 없습니다. 모든 NextCloud 일정이 화면에서 사라집니다. 계속할까요?')) return;
-  }
-
-  await window.electronAPI.nextcloudSetSelectedCalendars(picked);
-  closeNcManageModal();
-  await refreshNextcloudAuthStatus();
-  toast(`NextCloud 캘린더 ${picked.length}개 저장됨`);
-
-  // 🆕 색상만 바뀌었을 경우에도 즉시 반영
-  renderCalendar();
-
-  state.events = state.events.filter(e => e.source !== 'nextcloud');
-  await saveEvents();
-  renderCalendar();
-  setTimeout(() => syncFromNextcloud(), 300);
-});
-
 document.getElementById('ncManageRevoke').addEventListener('click', async () => {
-  if (!confirm('NextCloud 연결을 해제하시겠습니까?\n가져온 NextCloud 일정도 함께 제거됩니다.')) return;
+  if (!confirm(t('confirm.nextcloudDisconnect'))) return;
   try {
     await window.electronAPI.authNextcloudRevoke();
     state.events = state.events.filter(e => e.source !== 'nextcloud');
@@ -5268,9 +5226,9 @@ document.getElementById('ncManageRevoke').addEventListener('click', async () => 
     await saveEvents();
     closeNcManageModal();
     renderCalendar();
-    toast('NextCloud 연결 해제됨');
+    toast(t('toast.nextcloudDisconnected'));
   } catch (err) {
-    toast('해제 실패: ' + err.message);
+    toast(t('toast.disconnectFail', { err: err.message }));
   } finally {
     await refreshNextcloudAuthStatus();
   }
@@ -5292,7 +5250,7 @@ document.getElementById('ctxUnlock').addEventListener('click', async () => {
   state.locked = !state.locked;
   await applyLock();
   hideContextMenu();
-  toast(state.locked ? '잠금됨' : '잠금 해제됨 (이동/리사이즈 가능)');
+  toast(state.locked ? t('toast.locked') : t('toast.unlocked'));
 });
 
 document.getElementById('ctxSync').addEventListener('click', () => {
@@ -5302,33 +5260,33 @@ document.getElementById('ctxSync').addEventListener('click', () => {
 
 document.getElementById('ctxSettings').addEventListener('click', () => {
   hideContextMenu();
-  document.getElementById('settingsPanel').classList.add('show');
+  openSettingsModal();
 });
 
 document.getElementById('ctxAlwaysTop').addEventListener('click', async () => {
   hideContextMenu();
-  if (!isElectron) { toast('Electron 환경에서만 동작합니다'); return; }
+  if (!isElectron) { toast(t('toast.electronOnly')); return; }
   try {
     const current = await window.electronAPI.getAlwaysOnTop();
     const next = !current;
     await window.electronAPI.setAlwaysOnTop(next);
-    toast(next ? '항상 위에 표시 ON' : '항상 위에 표시 OFF');
+    toast(next ? t('toast.alwaysOnTopOn') : t('toast.alwaysOnTopOff'));
   } catch (err) {
-    toast('설정 실패: ' + err.message);
+    toast(t('toast.settingFail', { err: err.message }));
   }
 });
 
 
 document.getElementById('ctxAlwaysBottom').addEventListener('click', async () => {
   hideContextMenu();
-  if (!isElectron) { toast('Electron 환경에서만 동작합니다'); return; }
+  if (!isElectron) { toast(t('toast.electronOnly')); return; }
   try {
     const current = await window.electronAPI.getAlwaysAtBottom();
     const next = !current;
     await window.electronAPI.setAlwaysAtBottom(next);
-    toast(next ? '항상 뒤에 표시 ON' : '항상 뒤에 표시 OFF');
+    toast(next ? t('toast.alwaysAtBottomOn') : t('toast.alwaysAtBottomOff'));
   } catch (err) {
-    toast('설정 실패: ' + err.message);
+    toast(t('toast.settingFail', { err: err.message }));
   }
 });
 
@@ -5344,7 +5302,7 @@ document.getElementById('alwaysOnTopToggle').addEventListener('change', async (e
       if (aabCb) aabCb.checked = false;
     }
   } catch (err) {
-    toast('설정 실패: ' + err.message);
+    toast(t('toast.settingFail', { err: err.message }));
   }
 });
 
@@ -5354,14 +5312,14 @@ document.getElementById('alwaysAtBottomToggle').addEventListener('change', async
   if (!isElectron) return;
   try {
     await window.electronAPI.setAlwaysAtBottom(e.target.checked);
-    toast(e.target.checked ? '항상 뒤에 표시 ON' : '항상 뒤에 표시 OFF');
+    toast(e.target.checked ? t('toast.alwaysAtBottomOn') : t('toast.alwaysAtBottomOff'));
     // 상호 배타: 위에 표시 체크 해제
     if (e.target.checked) {
       const aotCb = document.getElementById('alwaysOnTopToggle');
       if (aotCb) aotCb.checked = false;
     }
   } catch (err) {
-    toast('설정 실패: ' + err.message);
+    toast(t('toast.settingFail', { err: err.message }));
   }
 });
 
@@ -5409,7 +5367,7 @@ if (isElectron && window.electronAPI.onAlwaysAtBottomChanged) {
 // ─── 컨텍스트 메뉴 "종료" 항목 ───
 document.getElementById('ctxQuit').addEventListener('click', async () => {
   hideContextMenu();
-  if (isElectron && confirm('정말 종료하시겠습니까?')) {
+  if (isElectron && confirm(t('confirm.quit'))) {
     await window.electronAPI.quit();
   }
 });
@@ -5425,7 +5383,7 @@ document.getElementById('ctxQuit').addEventListener('click', async () => {
 // 위젯 외부(또는 캘린더 빈 영역) 클릭 → 모든 팝오버/메뉴 닫기
 document.addEventListener('click', () => {
   hideContextMenu();
-  document.getElementById('settingsPanel').classList.remove('show');
+  closeSettingsModal();
   hideDayPopover();
 });
 
@@ -5446,7 +5404,7 @@ window.addEventListener('blur', () => {
     document.getElementById('catModalBg').classList.contains('show');   // 🆕 v26.7.22
   if (anyModalOpen) return;
 
-  document.getElementById('settingsPanel').classList.remove('show');
+  closeSettingsModal();
   hideContextMenu();
   hideDayPopover();
 });
@@ -5455,7 +5413,7 @@ window.addEventListener('blur', () => {
 // 단, 모달 안에서의 우클릭은 무시 (입력칸 우클릭 메뉴 사용 위해)
 document.addEventListener('contextmenu', (e) => {
   if (e.target.closest('.modal')) return;
-  document.getElementById('settingsPanel').classList.remove('show');
+  closeSettingsModal();
   document.getElementById('eventModalBg').classList.remove('show');
   hideDayPopover();
 });
@@ -5473,7 +5431,7 @@ document.addEventListener('visibilitychange', () => {
       document.getElementById('catModalBg').classList.contains('show');   // 🆕 v26.7.22
     if (anyModalOpen) return;
 
-    document.getElementById('settingsPanel').classList.remove('show');
+    closeSettingsModal();
     hideContextMenu();
     hideDayPopover();
   }
@@ -5504,7 +5462,7 @@ if (isElectron) {
 
   // 트레이 "설정 열기" → 설정 패널 표시
   window.electronAPI.onOpenSettings(() => {
-    document.getElementById('settingsPanel').classList.add('show');
+    openSettingsModal();
   });
 
   // 동기화 상태 메시지 (현재는 사용 안 하지만 향후 확장용)
@@ -5530,7 +5488,7 @@ if (isElectron) {
       document.getElementById('catModalBg').classList.contains('show');   // 🆕 v26.7.22
     if (anyModalOpen) return;
 
-    document.getElementById('settingsPanel').classList.remove('show');
+    closeSettingsModal();
     hideContextMenu();
     hideDayPopover();
   });
@@ -5556,6 +5514,10 @@ if (isElectron) {
 (async () => {
   // 1) 저장소에서 일정/메모/설정 로드
   await loadAll();
+
+  // 🆕 v26.0828.1 언어 — 정적 마크업(data-i18n) 번역 적용 + 설정 모달의 언어 드롭다운 채우기
+  window.applyI18n?.();
+  initLanguageSelect();
 
   // 2) state 값들을 화면에 반영
   await applyLock();    // 잠금 상태 → DOM + 메인 동기화

@@ -6,7 +6,6 @@
 
 const { OAuth2Client } = require('google-auth-library');
 const { calendar } = require('@googleapis/calendar');
-const { oauth2 } = require('@googleapis/oauth2');
 const http = require('http');
 const { shell } = require('electron');
 const Store = require('electron-store');
@@ -95,20 +94,26 @@ async function authenticate() {
           }
 
           const { tokens } = await client.getToken(code);
+          if (!tokens.access_token) {
+            throw new Error('Google OAuth 응답에 access token이 없습니다. OAuth 클라이언트 설정을 확인해주세요.');
+          }
           client.setCredentials(tokens);
 
-          const oauth2Api = oauth2({ version: 'v2', auth: client });
-          const userInfo = await oauth2Api.userinfo.get();
+          const userInfo = await fetchUserInfo(client);
+          const email = userInfo.email || userInfo.data?.email;
+          if (!email) {
+            throw new Error('Google 계정 이메일을 확인할 수 없습니다.');
+          }
 
           tokenStore.set('tokens', tokens);
-          tokenStore.set('email', userInfo.data.email);
+          tokenStore.set('email', email);
           tokenStore.set('connectedAt', new Date().toISOString());
           // 새 인증 시 기존 캘린더 선택은 초기화 (사용자가 다시 고르도록)
           tokenStore.delete('selectedCalendars');
 
-          sendHtml(res, 200, successPage(userInfo.data.email));
+          sendHtml(res, 200, successPage(email));
           cleanup();
-          resolve({ email: userInfo.data.email });
+          resolve({ email });
         } catch (err) {
           sendHtml(res, 500, errorPage(err.message));
           cleanup();
@@ -157,6 +162,15 @@ pre{background:#f0f0f0;padding:10px;border-radius:6px;text-align:left;font-size:
 }
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// OAuth 클라이언트가 직접 서명한 요청으로 계정 정보를 확인한다.
+// @googleapis/oauth2 래퍼와 google-auth-library 버전이 엇갈리면 auth가 누락될 수 있다.
+async function fetchUserInfo(client) {
+  const res = await client.request({
+    url: 'https://www.googleapis.com/oauth2/v2/userinfo'
+  });
+  return res.data || {};
 }
 
 // ─────────────────────────────────────────────

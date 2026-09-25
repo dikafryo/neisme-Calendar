@@ -56,21 +56,15 @@ window.LOCALES = {
     // ── 설정 모달 ──
     'settings.title': '설정',
     'settings.close': '닫기',
+    // 🆕 v26.0925.1 탭 4개(일반/스킨/카테고리/계정연동) → 2개(일반/캘린더)
     'settings.tab.general': '일반',
-    'settings.tab.skin': '스킨',
-    'settings.tab.category': '카테고리',
-    'settings.tab.account': '계정연동',
+    'settings.tab.calendar': '캘린더',
 
     'settings.general.language': '🌐 언어',
     'settings.general.windowBehavior': '🪟 창 동작',
     'settings.general.lock': '창 잠금',
     'settings.general.alwaysOnTop': '항상 위에 표시',
     'settings.general.alwaysAtBottom': '항상 뒤에 표시',
-    'settings.general.defaultTargetHeading': '➕ 새 일정 기본 위치',
-    'settings.general.defaultTargetHintHtml':
-      '일정을 새로 추가할 때 <b>저장 위치가 자동으로 선택</b>되는 곳이에요. ' +
-      'Google/NextCloud는 <b>동기화 설정</b> 모달에서, 로컬은 <b>카테고리 관리</b> 모달에서 ' +
-      '캘린더/카테고리 옆의 <span class="hint-star">☆→★</span> 를 눌러 지정하세요.',
     'settings.general.currentDefault': '현재 기본 위치',
 
     'settings.skin.layout': '📐 레이아웃',
@@ -85,17 +79,27 @@ window.LOCALES = {
     'settings.skin.fontSize': '폰트 크기',
     'settings.skin.eventWrap': '일정 제목 여러 줄',
 
-    'settings.category.heading': '🏷 카테고리',
-    'settings.category.localLabel': '로컬 일정 카테고리',
     'settings.category.manageBtn': '관리',
-    'settings.category.countSuffix': '개',
 
     'settings.account.syncHeading': '🔄 동기화',
-    'settings.account.syncHeadingTitle': '클릭하여 지금 동기화',
+    'settings.account.syncNowBtn': '지금 동기화',
+    'settings.account.syncNowTitle': '연결된 계정 전부 지금 동기화 + 캘린더 목록 새로고침',
     'settings.account.googleLabel': 'Google Calendar / Tasks',
     'settings.account.nextcloudLabel': 'NextCloud Calendar',
     'settings.account.disconnected': '미연결',
     'settings.account.connect': '연결',
+    // 🆕 v26.0925.1 캘린더 탭 (기본 위치 안내 + 인라인 목록)
+    'settings.account.defaultTargetHintHtml':
+      '아래 목록에서 별을 눌러 지정하세요.<br>' +
+      '<span class="hint-star">★ 주황 별</span> = 새 일정을 추가할 때 <b>자동으로 선택되는 저장 위치</b> (로컬·Google·NextCloud 통틀어 1곳)<br>' +
+      '<span class="hint-star-primary">⭐ 노란 별</span> = 그 계정 안에서의 <b>대표 캘린더</b> (일정 모달에서 저장 위치를 그 계정으로 바꿀 때 기본 선택)',
+    'settings.account.localLabel': '🏷 달력 카테고리 (로컬)',
+    'acct.loading': '캘린더 목록을 불러오는 중…',
+    'acct.connectFirst': '연결하면 캘린더 목록이 여기에 표시됩니다.',
+    'acct.pickCalendars': '동기화할 캘린더를 체크하세요.',
+    'acct.calCheckTitle': '체크하면 이 캘린더를 동기화합니다',
+    'toast.calendarSyncOnFmt': '{name} 동기화 켬',
+    'toast.calendarSyncOffFmt': '{name} 동기화 끔',
 
     // ── 레이아웃/테마 토스트 ──
     'toast.layoutUniform': '균일 모드',
@@ -156,7 +160,6 @@ window.LOCALES = {
     'btn.cancel': '취소',
     'btn.delete': '삭제',
     'btn.save': '저장',
-    'btn.done': '완료',
     'btn.disconnect': '연결 해제',
 
     'recScope.title': '반복 일정 수정',
@@ -175,14 +178,7 @@ window.LOCALES = {
     'nc.passLabel': '앱 비밀번호',
     'nc.hintHtml': '보안을 위해 <b>앱 비밀번호</b>를 권장합니다.<br>' +
       'NextCloud → 설정 → 보안 → 기기 및 세션 → "새 앱 비밀번호 만들기"',
-    'nc.selectCalendarsTitle': '동기화할 캘린더 선택',
-    'cal.selectHintHtml': '체크 = 동기화에 포함<br>' +
-      '<b>⭐ 노란 별</b> = 이 계정에서 대표로 쓸 캘린더 (1개)<br>' +
-      '<b>★ 주황 별</b> = 새 일정 추가 시 자동 선택되는 전체 기본 위치 (로컬·Google·NextCloud 통합 1곳)',
-    'gcal.title': 'Google 캘린더 선택',
-    'ncManage.title': 'NextCloud 캘린더 선택',
     'cal.empty': '사용 가능한 캘린더가 없습니다',
-    'cal.checkFirst': '먼저 체크해주세요',
     'cal.colorChangeTitle': '클릭하여 색상 변경',
     'cal.colorResetTitle': '원래 Google 색상으로 복원',
     'cal.starPrimaryTitle': '이 source 의 대표 캘린더로 지정',
@@ -218,9 +214,8 @@ window.LOCALES = {
     // ── 토스트/확인 (다이얼로그) ──
     'confirm.deleteEvent': '이 일정을 삭제하시겠습니까?',
     'confirm.quit': '정말 종료하시겠습니까?',
-    'confirm.googleNoSelection': '선택된 캘린더가 없습니다. 모든 Google 일정이 화면에서 사라집니다. 계속할까요?',
+    'confirm.discardEventEdits': '작성 중인 일정 내용이 있습니다. 저장하지 않고 닫을까요?',
     'confirm.googleDisconnect': 'Google 연결을 해제하시겠습니까?\n가져온 Google 일정과 Tasks도 함께 제거됩니다.',
-    'confirm.nextcloudNoSelection': '선택된 캘린더가 없습니다. 모든 NextCloud 일정이 화면에서 사라집니다. 계속할까요?',
     'confirm.nextcloudDisconnect': 'NextCloud 연결을 해제하시겠습니까?\n가져온 NextCloud 일정도 함께 제거됩니다.',
     'confirm.categoryDeleteFmt': '"{name}" 카테고리를 삭제할까요?',
 
@@ -258,7 +253,6 @@ window.LOCALES = {
     'toast.nextcloudSyncCompleteFmt': 'NextCloud 동기화 완료 · {n}건',
     'toast.nextcloudError': 'NextCloud 오류: {err}',
     'toast.checkFirst': '먼저 체크해주세요',
-    'toast.googleCalendarsSavedFmt': 'Google 캘린더 {n}개 저장됨',
     'toast.googleConnectedFmt': '연결됨: {email}',
     'toast.googleConnectFail': '연결 실패: {err}',
     'toast.googleLoginInBrowser': '브라우저에서 Google 로그인을 진행하세요',
@@ -269,9 +263,6 @@ window.LOCALES = {
     'toast.categoriesClearedAll': '카테고리를 모두 비웠습니다',
     'toast.categoriesSavedFmt': '카테고리 {n}개 저장됨',
     'toast.fieldsRequired': '모든 필드를 입력하세요',
-    'toast.nextcloudCalendarsSelectedFmt': 'NextCloud 캘린더 {n}개 선택됨',
-    'toast.nextcloudCalendarsSavedFmt': 'NextCloud 캘린더 {n}개 저장됨',
-    'toast.selectAtLeastOne': '최소 한 개 이상 선택하세요',
     'toast.nextcloudDisconnected': 'NextCloud 연결 해제됨',
     'toast.locked': '잠금됨',
     'toast.unlocked': '잠금 해제됨 (이동/리사이즈 가능)',
@@ -284,19 +275,16 @@ window.LOCALES = {
     'notification.titleFmt': '🔔 {label} 알림',
 
     // ── 계정 상태 라벨 ──
-    'account.syncSettingsBtn': '동기화 설정',
-    'account.selectCalendarBtn': '캘린더 선택',
     'account.connectingBtn': '연결 중...',
     'account.authenticatingBtn': '인증 중...',
     'account.googleConnectTitle': 'Google 계정 연결',
     'account.nextcloudConnectTitle': 'NextCloud 계정 연결',
-    'account.nextcloudSelectCalendarTitle': '동기화할 캘린더를 선택하세요',
     'account.calendarCountFmt': '{user} · 캘린더 {n}개',
     'account.noCalendarFmt': '{user} (캘린더 미선택)',
     'account.startDowAutoTitle': '시작일 요일 (자동)',
     'account.startOrdAutoTitle': '시작일 주차 (자동)',
-    'account.googleTooltipFmt': '{email}\n캘린더 {n}개 선택됨\n클릭하여 캘린더/기본 위치 설정',
-    'account.nextcloudTooltipFmt': '{user} @ {server}\n캘린더 {n}개 선택됨\n클릭하여 캘린더/기본 위치 설정',
+    'account.googleTooltipFmt': '{email}\n캘린더 {n}개 선택됨\n클릭하면 연결을 해제합니다',
+    'account.nextcloudTooltipFmt': '{user} @ {server}\n캘린더 {n}개 선택됨\n클릭하면 연결을 해제합니다',
 
     // ── 기본 위치 라벨 ──
     'defaultTarget.unset': '(미설정 — Google 우선)',
@@ -366,20 +354,13 @@ window.LOCALES = {
     'settings.title': 'Settings',
     'settings.close': 'Close',
     'settings.tab.general': 'General',
-    'settings.tab.skin': 'Skin',
-    'settings.tab.category': 'Category',
-    'settings.tab.account': 'Accounts',
+    'settings.tab.calendar': 'Calendars',
 
     'settings.general.language': '🌐 Language',
     'settings.general.windowBehavior': '🪟 Window behavior',
     'settings.general.lock': 'Lock window',
     'settings.general.alwaysOnTop': 'Always on top',
     'settings.general.alwaysAtBottom': 'Always at bottom',
-    'settings.general.defaultTargetHeading': '➕ Default location for new events',
-    'settings.general.defaultTargetHintHtml':
-      'This is where a new event\'s <b>save location is picked automatically</b>. ' +
-      'For Google/NextCloud, set it in the <b>sync settings</b> dialog; for local events, in the <b>category manager</b> — ' +
-      'click the <span class="hint-star">☆→★</span> next to a calendar/category.',
     'settings.general.currentDefault': 'Current default',
 
     'settings.skin.layout': '📐 Layout',
@@ -394,17 +375,26 @@ window.LOCALES = {
     'settings.skin.fontSize': 'Font size',
     'settings.skin.eventWrap': 'Wrap long event titles',
 
-    'settings.category.heading': '🏷 Categories',
-    'settings.category.localLabel': 'Local event categories',
     'settings.category.manageBtn': 'Manage',
-    'settings.category.countSuffix': '',
 
     'settings.account.syncHeading': '🔄 Sync',
-    'settings.account.syncHeadingTitle': 'Click to sync now',
+    'settings.account.syncNowBtn': 'Sync now',
+    'settings.account.syncNowTitle': 'Sync all connected accounts now and refresh the calendar lists',
     'settings.account.googleLabel': 'Google Calendar / Tasks',
     'settings.account.nextcloudLabel': 'NextCloud Calendar',
     'settings.account.disconnected': 'Not connected',
     'settings.account.connect': 'Connect',
+    'settings.account.defaultTargetHintHtml':
+      'Click a star in the lists below to set it.<br>' +
+      '<span class="hint-star">★ Orange star</span> = the <b>save location picked automatically</b> for new events (one place across local/Google/NextCloud)<br>' +
+      '<span class="hint-star-primary">⭐ Yellow star</span> = the <b>primary calendar</b> within that account (preselected when you switch an event\'s location to that account)',
+    'settings.account.localLabel': '🏷 Calendar categories (local)',
+    'acct.loading': 'Loading calendars…',
+    'acct.connectFirst': 'Connect to see your calendars here.',
+    'acct.pickCalendars': 'Check the calendars you want to sync.',
+    'acct.calCheckTitle': 'Check to sync this calendar',
+    'toast.calendarSyncOnFmt': '{name} sync on',
+    'toast.calendarSyncOffFmt': '{name} sync off',
 
     'toast.layoutUniform': 'Uniform mode',
     'toast.layoutSplit': 'Compact weekend mode',
@@ -463,7 +453,6 @@ window.LOCALES = {
     'btn.cancel': 'Cancel',
     'btn.delete': 'Delete',
     'btn.save': 'Save',
-    'btn.done': 'Done',
     'btn.disconnect': 'Disconnect',
 
     'recScope.title': 'Edit recurring event',
@@ -481,14 +470,7 @@ window.LOCALES = {
     'nc.passLabel': 'App password',
     'nc.hintHtml': 'For security, we recommend an <b>app password</b>.<br>' +
       'NextCloud → Settings → Security → Devices & sessions → "Create new app password"',
-    'nc.selectCalendarsTitle': 'Select calendars to sync',
-    'cal.selectHintHtml': 'Checked = included in sync<br>' +
-      '<b>⭐ Yellow star</b> = the primary calendar for this account (1 only)<br>' +
-      '<b>★ Orange star</b> = the single default location for new events (shared across local/Google/NextCloud)',
-    'gcal.title': 'Select Google calendars',
-    'ncManage.title': 'Select NextCloud calendars',
     'cal.empty': 'No calendars available',
-    'cal.checkFirst': 'Please check it first',
     'cal.colorChangeTitle': 'Click to change color',
     'cal.colorResetTitle': 'Restore original Google color',
     'cal.starPrimaryTitle': 'Set as the primary calendar for this source',
@@ -520,9 +502,8 @@ window.LOCALES = {
 
     'confirm.deleteEvent': 'Delete this event?',
     'confirm.quit': 'Are you sure you want to quit?',
-    'confirm.googleNoSelection': 'No calendars are selected. All Google events will disappear from view. Continue?',
+    'confirm.discardEventEdits': 'You have unsaved changes to this event. Close without saving?',
     'confirm.googleDisconnect': 'Disconnect Google?\nImported Google events and Tasks will also be removed.',
-    'confirm.nextcloudNoSelection': 'No calendars are selected. All NextCloud events will disappear from view. Continue?',
     'confirm.nextcloudDisconnect': 'Disconnect NextCloud?\nImported NextCloud events will also be removed.',
     'confirm.categoryDeleteFmt': 'Delete category "{name}"?',
 
@@ -560,7 +541,6 @@ window.LOCALES = {
     'toast.nextcloudSyncCompleteFmt': 'NextCloud sync complete · {n} item(s)',
     'toast.nextcloudError': 'NextCloud error: {err}',
     'toast.checkFirst': 'Please check it first',
-    'toast.googleCalendarsSavedFmt': 'Saved {n} Google calendar(s)',
     'toast.googleConnectedFmt': 'Connected: {email}',
     'toast.googleConnectFail': 'Connection failed: {err}',
     'toast.googleLoginInBrowser': 'Continue signing in to Google in your browser',
@@ -571,9 +551,6 @@ window.LOCALES = {
     'toast.categoriesClearedAll': 'All categories cleared',
     'toast.categoriesSavedFmt': 'Saved {n} categor(y/ies)',
     'toast.fieldsRequired': 'Please fill in all fields',
-    'toast.nextcloudCalendarsSelectedFmt': 'Selected {n} NextCloud calendar(s)',
-    'toast.nextcloudCalendarsSavedFmt': 'Saved {n} NextCloud calendar(s)',
-    'toast.selectAtLeastOne': 'Please select at least one',
     'toast.nextcloudDisconnected': 'NextCloud disconnected',
     'toast.locked': 'Locked',
     'toast.unlocked': 'Unlocked (movable/resizable)',
@@ -585,19 +562,16 @@ window.LOCALES = {
     'toast.alarmFiredFmt': '🔔 {title} ({label})',
     'notification.titleFmt': '🔔 {label} reminder',
 
-    'account.syncSettingsBtn': 'Sync settings',
-    'account.selectCalendarBtn': 'Select calendars',
     'account.connectingBtn': 'Connecting...',
     'account.authenticatingBtn': 'Authenticating...',
     'account.googleConnectTitle': 'Connect Google account',
     'account.nextcloudConnectTitle': 'Connect NextCloud account',
-    'account.nextcloudSelectCalendarTitle': 'Select calendars to sync',
     'account.calendarCountFmt': '{user} · {n} calendar(s)',
     'account.noCalendarFmt': '{user} (no calendar selected)',
     'account.startDowAutoTitle': 'Start day (automatic)',
     'account.startOrdAutoTitle': 'Start week (automatic)',
-    'account.googleTooltipFmt': '{email}\n{n} calendar(s) selected\nClick to manage calendars/default location',
-    'account.nextcloudTooltipFmt': '{user} @ {server}\n{n} calendar(s) selected\nClick to manage calendars/default location',
+    'account.googleTooltipFmt': '{email}\n{n} calendar(s) selected\nClick to disconnect',
+    'account.nextcloudTooltipFmt': '{user} @ {server}\n{n} calendar(s) selected\nClick to disconnect',
 
     'defaultTarget.unset': '(Not set — Google preferred)',
     'defaultTarget.localFmt': 'Local · {name}',

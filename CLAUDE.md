@@ -72,7 +72,11 @@ Color resolution flows through `eventColor()`. For local events: category color 
 
 `state.calendarMeta.{google,nextcloud}` (`{ '<id|url>': { name, custom } }`) is rebuilt alongside `state.calendarColors` in `refreshGoogleAuthStatus` / `refreshNextcloudAuthStatus`; `custom` records whether the user explicitly picked a color in the calendar modal, which is what lets an explicit color outrank the category color. If you add a new remote source, populate both maps.
 
-The category manager modal (`catModalBg`, `openCategoryModal`) edits a `catDraft` copy; on save, events pointing at deleted categories have `categoryId` stripped. Duplicate names are rejected — they would make the remote-calendar match ambiguous. It can be opened stacked on top of the event modal via the dropdown's `＋ 새 카테고리 만들기…` entry (`CAT_NEW_OPTION`); in that case `closeCategoryModal()` must re-assert `modalAotBypass(true)` rather than restoring alwaysOnTop, or the still-open event modal loses keyboard input.
+The category manager modal (`catModalBg`, `openCategoryModal`) edits a `catDraft` copy; on save, events pointing at deleted categories have `categoryId` stripped. Duplicate names are rejected — they would make the remote-calendar match ambiguous. It can be opened stacked on top of the event modal via the dropdown's `＋ 새 카테고리 만들기…` entry (`CAT_NEW_OPTION`) or on top of the settings modal via 관리; the stacked-modal alwaysOnTop bookkeeping is handled by `hideModal()` (see below), not by the category code.
+
+### Settings modal (v26.0925.1)
+
+`#settingsPanel` is a `.modal-bg` with two tabs: `general` (language, window behavior, layout, theme/opacity/font/wrap) and `calendar` (sync header, default target ★, local categories, Google, NextCloud). Remote calendar lists render inline in the calendar tab — there is no separate "calendar picker" modal anymore. Google and NextCloud share one code path: `ACCT_REMOTE[source]` is an adapter object (key/name/color/save/refresh/revoke differences) consumed by `loadAcctList` / `renderAcctList` / `applyAcctSelection` / `revokeAccount`. Every change in those lists saves immediately (no 저장 button); checkbox toggles wipe that source's events and re-sync after a short debounce. The settings modal is intentionally *not* closed on window blur, backdrop click, or clicks in modals stacked on it — only ✕ / ⚙ / Esc / right-click outside.
 
 ### Sync state
 
@@ -88,7 +92,7 @@ Recurrence logic lives entirely in the renderer (`parseRrule` / `buildRrule` / `
 
 ### alwaysOnTop modal trick
 
-The widget runs with `alwaysOnTop=true`, which on Windows prevents OS-level focus from entering the window — keyboard input goes to the previously active app. Modals call `electronAPI.modalAotBypass(true)` on open (drops alwaysOnTop, restores, focuses) and `(false)` on close (restores from store). If you add a new modal, wire both calls or text inputs will silently fail. See `openEventModal` / `closeEventModal` for the canonical pattern. The older `focusWindow()` IPC alone is insufficient.
+The widget runs with `alwaysOnTop=true`, which on Windows prevents OS-level focus from entering the window — keyboard input goes to the previously active app. The renderer's `showModal(id)` / `hideModal(id)` helpers (유틸 section) wrap this: `showModal` calls `electronAPI.modalAotBypass(true)` (drops alwaysOnTop, restores, focuses) before adding `.show`; `hideModal` removes `.show` and then passes `anyModalOpen()` to the bypass, so alwaysOnTop is only restored when the *last* modal closes and stacked modals keep keyboard focus. If you add a new modal, add its id to `MODAL_IDS` and open/close it only through these helpers — never toggle `.show` directly, or text inputs will silently fail. The older `focusWindow()` IPC alone is insufficient. `anyModalOpen()` also gates the blur / visibilitychange / window-hidden cleanup handlers, and a global Esc handler closes the topmost modal.
 
 ### Tray and `--hidden`
 

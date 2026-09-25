@@ -966,6 +966,14 @@ body {
   letter-spacing: 0.5px;
 }
 
+/* 🆕 v26.0925.1 설정 모달만 세로 중앙정렬 대신 "상단 고정".
+   중앙정렬이면 탭마다 내용 길이가 달라질 때 제목표시줄이 위아래로 움직여서
+   눈이 따라가야 했다. 위쪽을 고정해두고 내용이 길어지면 아래로만 자라게 함. */
+.modal-bg.settings-panel {
+  align-items: flex-start;
+  padding-top: 7vh;
+}
+
 /* 설정 모달 박스 자체 — 폭 넓히고 내부를 [탭 사이드바 | 내용] 2단으로 */
 .modal.settings-modal {
   width: 620px;
@@ -973,7 +981,7 @@ body {
   padding: 0;
   display: flex;
   flex-direction: column;
-  max-height: 86vh;
+  max-height: 84vh;   /* 상단 7vh + 이 높이 = 화면 안에 들어오게 */
   font-size: 12px;
 }
 .settings-modal-head {
@@ -1003,35 +1011,34 @@ body {
   flex: 1;
 }
 
-/* 좌측 탭 목록 */
+/* 🆕 v26.0925.1 상단 가로 탭 (탭이 2개뿐이라 좌측 사이드바는 공간 낭비) */
 .settings-tabs {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
-  width: 128px;
+  flex-direction: row;
+  gap: 4px;
   flex-shrink: 0;
-  padding: 10px 8px;
-  border-right: 1px solid var(--surface-divider);
+  padding: 8px 14px 0;
+  border-bottom: 1px solid var(--surface-divider);
 }
 .settings-tab {
   display: flex;
   align-items: center;
-  gap: 7px;
-  padding: 9px 10px;
+  gap: 6px;
+  padding: 8px 14px 9px;
   border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;   /* 아래 구분선과 겹치게 */
   background: transparent;
-  border-radius: 8px;
   font-size: 12px;
   font-family: inherit;
   color: var(--surface-secondary);
   cursor: pointer;
-  text-align: left;
 }
-.settings-tab:hover { background: var(--surface-hover-bg); }
-.settings-tab.active { background: #4285f4; color: #fff; }
-.settings-tab-icon { font-size: 13px; width: 16px; text-align: center; }
+.settings-tab:hover { color: var(--surface-fg); background: var(--surface-hover-bg); border-radius: 8px 8px 0 0; }
+.settings-tab.active { color: #4285f4; font-weight: 600; border-bottom-color: #4285f4; }
+.settings-tab-icon { font-size: 13px; }
 
-/* 우측 탭 내용 */
+/* 탭 내용 */
 .settings-panes {
   flex: 1;
   min-width: 0;
@@ -1052,6 +1059,19 @@ body {
   padding: 6px 8px;
   margin: 0 0 9px;
 }
+/* 🆕 v26.0925.1 섹션 제목 + 우측 버튼 한 줄 ("🔄 동기화  [지금 동기화]") */
+.settings-heading-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.settings-heading-row h4 { margin: 0; }
+.settings-hint .hint-star-primary {
+  color: #f4b400;
+  font-weight: 700;
+  white-space: nowrap;
+}
 .settings-hint .hint-star {
   color: #ffa64d;
   font-weight: 700;
@@ -1065,7 +1085,18 @@ body {
   font-size: 11px;
   color: var(--surface-secondary);
 }
-.settings-row input[type=range] { width: 130px; }
+/* 행 라벨은 줄바꿈 금지 ("투명도" 가 "투명/도" 로 갈라지지 않게) */
+.settings-row > span:first-child { white-space: nowrap; flex-shrink: 0; margin-right: 12px; }
+/* 🆕 v26.0925.1 .modal input { width:100%; padding; border } 규칙이 더 구체적이라 슬라이더가
+   행 전체로 늘어나며 라벨을 밀어냈다 — 설정 모달 안에서는 슬라이더를 고정폭 + 무테로. */
+.modal .settings-row input[type=range] {
+  width: 160px;
+  flex: 0 0 160px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  margin-left: auto;
+}
 .settings-row input[type=checkbox] { transform: scale(1.1); cursor: pointer; }
 .settings-value { font-size: 11px; color: var(--surface-label); min-width: 38px; text-align: right; }
 .settings-divider { height: 1px; background: var(--surface-divider); margin: 10px 0; }
@@ -1142,6 +1173,49 @@ body {
 .account-btn.connected { background: #34a853; }
 .account-btn.connected:hover { background: #2d8e44; }
 .account-btn:disabled { background: #ccc; cursor: not-allowed; }
+/* 🆕 v26.0925.1 연결된 상태의 "연결 해제" 버튼 — 눈에 띄되 공격적이지 않게 외곽선형 */
+.account-btn.danger {
+  background: transparent;
+  color: #ea4335;
+  border: 1px solid rgba(234,67,53,0.45);
+}
+.account-btn.danger:hover { background: rgba(234,67,53,0.10); }
+
+/* ── 🆕 v26.0925.1 "계정연동" 탭에 바로 박히는 캘린더/카테고리 목록 ──
+   모달의 .cal-select-list 와 같은 행 구조(.cal-select-item)를 쓰되,
+   설정 모달 안이라 테마 변수를 타도록 색만 다시 잡는다. */
+.acct-cal-list {
+  border: 1px solid var(--surface-border);
+  border-radius: 7px;
+  background: var(--surface-hover-bg);
+  margin: 0 0 10px;
+  max-height: 210px;
+  overflow-y: auto;
+}
+.acct-cal-list:empty { display: none; }
+.acct-cal-list .cal-select-item {
+  padding: 6px 10px;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--surface-fg);
+  border-bottom: 1px solid var(--surface-divider);
+}
+.acct-cal-list .cal-select-item:hover { background: var(--surface-hover-bg); }
+.acct-cal-list .cal-name { color: var(--surface-fg); }
+.acct-cal-list .cal-select-empty {
+  padding: 12px;
+  font-size: 10.5px;
+  color: var(--surface-muted);
+  text-align: center;
+}
+.acct-cal-list .cal-select-error { margin: 8px; }
+/* 로딩 중 한 줄 */
+.acct-cal-loading {
+  padding: 10px;
+  font-size: 10.5px;
+  color: var(--surface-muted);
+  text-align: center;
+}
 
 .layout-options {
   display: grid;
@@ -1268,18 +1342,6 @@ body {
   color: #aaa;
 }
 
-.clickable-header {
-  cursor: pointer;
-  user-select: none;
-  transition: color 0.15s, transform 0.15s;
-}
-.clickable-header:hover {
-  color: #4285f4;
-}
-.clickable-header:active {
-  transform: scale(0.97);
-}
-
 .nc-hint {
   font-size: 11px;
   color: #888;
@@ -1287,35 +1349,6 @@ body {
   line-height: 1.55;
 }
 .nc-hint b { color: #0082c9; }
-
-.nc-cal-list {
-  max-height: 220px;
-  overflow-y: auto;
-  border: 1px solid #ddd;
-  border-radius: 7px;
-  margin-top: 6px;
-  background: #fafbfc;
-}
-.nc-cal-item {
-  padding: 9px 12px;
-  cursor: pointer;
-  border-bottom: 1px solid #eef0f3;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 12px;
-  color: #333;
-}
-.nc-cal-item:last-child { border-bottom: none; }
-.nc-cal-item:hover { background: #eef5ff; }
-.nc-cal-item.selected { background: #d9e9ff; font-weight: 600; }
-.nc-cal-item input[type="radio"] { margin: 0; cursor: pointer; }
-.nc-cal-empty {
-  padding: 20px;
-  text-align: center;
-  color: #999;
-  font-size: 12px;
-}
 
 /* ═════════════════════════════════════════════════════════
    🆕 다중 캘린더 선택 UI (Google/NextCloud 공용)
@@ -1414,17 +1447,6 @@ body {
   color: #ff8c00;   /* 주황 */
 }
 
-/* 모달 하단 분할 (좌측 "연결 해제" + 우측 "취소"/"저장") */
-.modal-actions-split {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-.modal-actions-right {
-  display: flex;
-  gap: 8px;
-}
-
 /* 텍스트 링크 스타일 버튼 ("연결 해제" 등) */
 .link-btn {
   border: none;
@@ -1434,9 +1456,6 @@ body {
   text-decoration: underline;
   padding: 4px 0;
 }
-.link-btn-danger        { color: #ea4335; }
-.link-btn-danger:hover  { color: #c5221f; }
-
 /* 일정 모달의 캘린더 하위 드롭다운 */
 #evCalendarRow { margin-top: 8px; }
 #evCalendar:disabled {
@@ -1512,13 +1531,6 @@ body {
 }
 .cal-select-error b     { color: #6b4500; }
 .cal-select-error small { font-size: 10.5px; }
-
-/* 모달 내 캘린더 목록 컨테이너 — 가로 스크롤 방지 */
-#gcalList,
-#ncManageList {
-  overflow-x: hidden;
-  overflow-y: auto;
-}
 
 /* ============================================================
    🆕 v26.7.22 ① 일정 제목 여러 줄 표시 (설정 → 표시 → "일정 제목 여러 줄")

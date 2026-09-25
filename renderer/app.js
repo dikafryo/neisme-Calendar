@@ -908,6 +908,54 @@ function sameDate(a, b) {
          a.getDate()     === b.getDate();
 }
 
+// ─────────────────────────────────────────────────────────────────
+//  🆕 v26.0925.1 모달 공통 헬퍼
+//  어떤 모달이든 열 때 showModal / 닫을 때 hideModal 만 쓰면 alwaysOnTop 우회
+//  (modalAotBypass)가 자동으로 따라온다. 모달이 겹쳐 열렸다가 하나만 닫힐 때
+//  "아직 다른 모달이 떠있으니 bypass 유지" 판단도 여기서 한 번에 처리한다.
+//  (예전엔 close 함수마다 keepBypass 를 따로 계산해서 모달을 추가할 때마다
+//   빠뜨리기 쉬웠고, 빠뜨리면 그 모달의 텍스트 입력이 먹통이 됐다.)
+// ─────────────────────────────────────────────────────────────────
+
+/** 화면에 존재하는 모달(.modal-bg) 전부. 설정 모달도 포함 — 다른 앱을 잠깐 클릭해도 닫히면 안 된다. */
+const MODAL_IDS = ['settingsPanel', 'eventModalBg', 'catModalBg', 'ncModalBg', 'recScopeModalBg'];
+
+function isModalOpen(id) {
+  return !!document.getElementById(id)?.classList.contains('show');
+}
+
+/** 지금 떠있는 모달이 하나라도 있는지. 블러/가시성/창 숨김 핸들러가 "정리해도 되는지" 판단할 때 씀. */
+function anyModalOpen() {
+  return MODAL_IDS.some(isModalOpen);
+}
+
+/**
+ * alwaysOnTop 임시 해제/복원 (main.js 'modal-aot-bypass').
+ * alwaysOnTop=true 인 창은 Windows 에서 클릭해도 OS 포커스가 안 들어와 키보드 입력이
+ * 이전 앱으로 가버리므로, 모달이 떠있는 동안만 잠깐 내려놓는다. fire-and-forget.
+ */
+function aotBypass(on) {
+  if (isElectron && window.electronAPI.modalAotBypass) {
+    window.electronAPI.modalAotBypass(!!on).catch(() => {});
+  }
+}
+
+/** 모달 열기. bypass 를 먼저 걸어 모달이 보이는 시점엔 이미 포커스가 우리 창에 있게. */
+function showModal(id) {
+  aotBypass(true);
+  document.getElementById(id).classList.add('show');
+}
+
+/** 모달 닫기. 다른 모달이 아직 떠있으면 bypass 유지(+포커스를 그쪽으로), 마지막이면 복원.
+ *  이미 닫혀있으면 아무것도 안 함 (방어적으로 여러 번 불려도 IPC 가 안 나감). */
+function hideModal(id) {
+  const el = document.getElementById(id);
+  if (!el || !el.classList.contains('show')) return false;
+  el.classList.remove('show');
+  aotBypass(anyModalOpen());
+  return true;
+}
+
 /** Date → "YYYY-MM-DD" 문자열. 일정의 date 필드는 항상 이 형식. */
 function formatDate(d) {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
@@ -1151,9 +1199,9 @@ function calDisplayName(c, source) {
  * ⭐ 노란 별(각 소스의 대표 캘린더, isPrimary)과는 별개 — 혼동 주의.
  */
 function isDefaultTarget(source, id) {
-  const t = state.defaultTarget;
-  if (!t || t.source !== source) return false;
-  return (t.id || null) === (id || null);
+  const dt = state.defaultTarget;
+  if (!dt || dt.source !== source) return false;
+  return (dt.id || null) === (id || null);
 }
 async function setDefaultTarget(source, id) {
   state.defaultTarget = source ? { source, id: id || null } : null;
@@ -1165,20 +1213,20 @@ async function setDefaultTarget(source, id) {
  * (선택 해제된 캘린더나 삭제된 카테고리가 default 로 박혀있으면 무의미 — null 취급)
  */
 function resolveDefaultTarget() {
-  const t = state.defaultTarget;
-  if (!t) return null;
-  if (t.source === 'local') {
-    if (!t.id) return { source: 'local', id: null };   // (분류 없음) — 항상 유효
-    const ok = (state.categories || []).some(c => c.id === t.id);
-    return ok ? { source: 'local', id: t.id } : null;
+  const dt = state.defaultTarget;
+  if (!dt) return null;
+  if (dt.source === 'local') {
+    if (!dt.id) return { source: 'local', id: null };   // (분류 없음) — 항상 유효
+    const ok = (state.categories || []).some(c => c.id === dt.id);
+    return ok ? { source: 'local', id: dt.id } : null;
   }
-  if (t.source === 'google') {
-    const ok = (state.googleSelectedCalendars || []).some(c => c.id === t.id);
-    return ok ? { source: 'google', id: t.id } : null;
+  if (dt.source === 'google') {
+    const ok = (state.googleSelectedCalendars || []).some(c => c.id === dt.id);
+    return ok ? { source: 'google', id: dt.id } : null;
   }
-  if (t.source === 'nextcloud') {
-    const ok = (state.nextcloudSelectedCalendars || []).some(c => c.url === t.id);
-    return ok ? { source: 'nextcloud', id: t.id } : null;
+  if (dt.source === 'nextcloud') {
+    const ok = (state.nextcloudSelectedCalendars || []).some(c => c.url === dt.id);
+    return ok ? { source: 'nextcloud', id: dt.id } : null;
   }
   return null;
 }
@@ -1868,12 +1916,11 @@ function buildEventsByDateMap(rangeStart, rangeEnd) {
  */
 function openEventModal(event, defaultDate) {
   // 🔧 v26.5.8a-fix1: 진입 시 모든 보조 overlay 정리 (방어)
-  document.getElementById('recScopeModalBg').classList.remove('show');
+  hideModal('recScopeModalBg');
   closeSettingsModal();
-  if (typeof hideContextMenu === 'function') hideContextMenu();
-  if (typeof hideDayPopover === 'function') hideDayPopover();
+  hideContextMenu();
+  hideDayPopover();
   
-  const bg     = document.getElementById('eventModalBg');     // 검은 반투명 배경
   const title  = document.getElementById('modalTitle');        // 제목 ("일정 추가" / "일정 편집")
   const delBtn = document.getElementById('deleteEvent');       // 삭제 버튼 (편집 시만 표시)
 
@@ -1999,15 +2046,12 @@ function openEventModal(event, defaultDate) {
   updateAlarmChips();         // 칩 disabled/active 상태 갱신
   updateRecurrenceUiVisibility();   // 🆕 반복 종료 옵션 표시 상태 갱신
 
-  // 🆕 v26.5.8e alwaysOnTop 임시 OFF + focus 강제 (키보드 입력 우회).
-  //   bg.classList.add('show') 직전에 호출해 모달이 보이는 시점엔
-  //   이미 OS-level focus 가 우리 윈도우에 있도록.
-  //   fire-and-forget — 실패해도 무해 (아래 setTimeout focusWindow fallback).
-  if (isElectron && window.electronAPI.modalAotBypass) {
-    window.electronAPI.modalAotBypass(true).catch(() => {});
-  }
-
-  bg.classList.add('show');   // 모달 표시
+  // 🆕 v26.5.8e alwaysOnTop 임시 OFF + focus 강제 (키보드 입력 우회) — showModal 이 처리.
+  //   모달이 보이는 시점엔 이미 OS-level focus 가 우리 윈도우에 있도록.
+  //   (실패해도 무해 — 아래 setTimeout focusWindow fallback)
+  showModal('eventModalBg');
+  // 🆕 v26.0925.1 열린 직후의 폼 상태를 기억 — Esc/바깥 우클릭으로 닫을 때 "바뀐 게 있는지" 판단용
+  eventFormOpenedSig = eventFormSignature();
 
   // 🔧 v26.5.8a-fix1: native window focus를 먼저 강제한 뒤 element focus
   // alwaysOnTop 위젯이 background 상태에서 모달을 열 때
@@ -2021,18 +2065,40 @@ function openEventModal(event, defaultDate) {
   }, 50);
 }
 
+// 🆕 v26.0925.1 일정 모달을 연 직후의 폼 서명. Esc/바깥 우클릭처럼 "실수로 닫기 쉬운" 경로에서
+//   내용이 바뀌었으면 확인을 묻기 위한 기준값 (취소/저장 버튼은 의도가 분명하므로 묻지 않음).
+let eventFormOpenedSig = '';
+
+/** 일정 모달의 모든 입력값 + 토글(알림 칩/요일/주차) 상태를 한 문자열로 */
+function eventFormSignature() {
+  const fields = [...document.querySelectorAll('#eventModalBg input, #eventModalBg select, #eventModalBg textarea')]
+    .map(el => el.type === 'checkbox' ? String(el.checked) : el.value);
+  const toggles = [...document.querySelectorAll('#eventModalBg .alarm-chip, #eventModalBg .weekday-toggle')]
+    .map(b => b.classList.contains('active') ? '1' : '0');
+  return fields.join('\u0001') + '|' + toggles.join('');
+}
+
+/** 열린 뒤 뭔가 바뀌었는지 */
+function eventFormDirty() {
+  return isModalOpen('eventModalBg') && eventFormSignature() !== eventFormOpenedSig;
+}
+
+/** Esc/바깥 우클릭 경로의 닫기: 바뀐 내용이 있으면 먼저 묻는다. 닫았으면 true. */
+function closeEventModalWithConfirm() {
+  if (!isModalOpen('eventModalBg')) return true;
+  if (eventFormDirty() && !confirm(t('confirm.discardEventEdits'))) return false;
+  closeEventModal();
+  return true;
+}
+
 /** 모달 닫고 편집 상태 초기화 */
 function closeEventModal() {
-  document.getElementById('eventModalBg').classList.remove('show');
+  hideModal('eventModalBg');   // alwaysOnTop 복원(다른 모달이 없으면)까지 포함
   state.editingEventId = null;
   state.editingInstanceContext = null;   // 🆕 v26.5.8a
   // 🆕 v26.5.9e mixed-dow 잠금 상태 리셋 — 다음 모달이 일반 흐름으로 열리게
   state.editingPreservedRrule = null;
   setRecurrenceFormLocked(false);
-  // 🆕 v26.5.8e alwaysOnTop 복원 (사용자 store 설정값 그대로)
-  if (isElectron && window.electronAPI.modalAotBypass) {
-    window.electronAPI.modalAotBypass(false).catch(() => {});
-  }
 }
 
 /**
@@ -2643,14 +2709,14 @@ function askRecurrenceScope(mode) {
       }
     };
     function cleanup() {
-      bg.classList.remove('show');
+      hideModal('recScopeModalBg');
       bg.removeEventListener('click', handler);
       bg.removeEventListener('click', bgClickHandler);
     }
 
     bg.addEventListener('click', handler);
     bg.addEventListener('click', bgClickHandler);
-    bg.classList.add('show');
+    showModal('recScopeModalBg');
   });
 }
 
@@ -3440,9 +3506,11 @@ async function refreshGoogleAuthStatus() {
 
     if (state.googleAuthenticated && state.googleEmail) {
       const count = state.googleSelectedCalendars.length;
-      // 🆕 v26.0728.1 "연결됨"(상태 표시처럼 읽힘) → "동기화 설정"(클릭 가능함이 드러나게)
-      btn.textContent = count > 0 ? t('account.syncSettingsBtn') : t('account.selectCalendarBtn');
-      btn.classList.add('connected');
+      // 🆕 v26.0925.1 "동기화 설정" → "연결 해제".
+      //   캘린더 목록을 설정 화면(캘린더 탭)에서 바로 켜고 끄므로 설정 모달로 갈 일이 없어졌다.
+      btn.textContent = t('btn.disconnect');
+      btn.classList.remove('connected');
+      btn.classList.add('danger');
       btn.title = t('account.googleTooltipFmt', { email: state.googleEmail, n: count });
       emailEl.textContent = count > 0
         ? t('account.calendarCountFmt', { user: state.googleEmail, n: count })
@@ -3450,12 +3518,13 @@ async function refreshGoogleAuthStatus() {
       emailEl.classList.remove('disconnected');
     } else {
       btn.textContent = t('settings.account.connect');
-      btn.classList.remove('connected');
+      btn.classList.remove('connected', 'danger');
       btn.title = t('account.googleConnectTitle');
       emailEl.textContent = t('settings.account.disconnected');
       emailEl.classList.add('disconnected');
     }
     renderDefaultTargetLabel();   // 🆕 v26.5.9f
+    syncAcctRowsFromState('google');      // 캘린더 탭의 인라인 목록 체크 상태 맞추기
   } catch (err) {
     console.error('Auth status check failed:', err);
   }
@@ -3497,28 +3566,27 @@ async function refreshNextcloudAuthStatus() {
     const btn = document.getElementById('nextcloudAuthBtn');
     const lbl = document.getElementById('nextcloudStatus');
 
-    if (state.nextcloudAuthenticated) {
+    // 🆕 v26.0925.1 인증만 돼있고 캘린더 미선택인 중간 상태도 "연결됨"으로 본다 —
+    //   캘린더 선택은 이제 같은 화면의 인라인 목록에서 바로 하므로 버튼은 항상 "연결 해제".
+    if (status.authenticated) {
       const count = state.nextcloudSelectedCalendars.length;
-      // 🆕 v26.0728.1 "연결됨"(상태 표시처럼 읽힘) → "동기화 설정"(클릭 가능함이 드러나게)
-      btn.textContent = t('account.syncSettingsBtn');
-      btn.classList.add('connected');
-      btn.title = t('account.nextcloudTooltipFmt', { user: status.username, server: status.serverUrl, n: count });
-      lbl.textContent = t('account.calendarCountFmt', { user: status.username, n: count });
-      lbl.classList.remove('disconnected');
-    } else if (status.authenticated) {
-      btn.textContent = t('account.selectCalendarBtn');
+      btn.textContent = t('btn.disconnect');
       btn.classList.remove('connected');
-      btn.title = t('account.nextcloudSelectCalendarTitle');
-      lbl.textContent = t('account.noCalendarFmt', { user: status.username });
-      lbl.classList.add('disconnected');
+      btn.classList.add('danger');
+      btn.title = t('account.nextcloudTooltipFmt', { user: status.username, server: status.serverUrl, n: count });
+      lbl.textContent = count > 0
+        ? t('account.calendarCountFmt', { user: status.username, n: count })
+        : t('account.noCalendarFmt', { user: status.username });
+      lbl.classList.toggle('disconnected', count === 0);
     } else {
       btn.textContent = t('settings.account.connect');
-      btn.classList.remove('connected');
+      btn.classList.remove('connected', 'danger');
       btn.title = t('account.nextcloudConnectTitle');
       lbl.textContent = t('settings.account.disconnected');
       lbl.classList.add('disconnected');
     }
     renderDefaultTargetLabel();   // 🆕 v26.5.9f
+    syncAcctRowsFromState('nextcloud');   // 캘린더 탭의 인라인 목록 체크 상태 맞추기
   } catch (err) {
     console.error('NextCloud status check failed:', err);
   }
@@ -4160,33 +4228,29 @@ document.querySelectorAll('.layout-card').forEach(card => {
 
 
 // ╔══════════════════════════════════════════════════════════════════╗
-// ║  ▼ 🆕 v26.0828.1 설정 모달 (드롭다운 패널 → 중앙 모달 + 좌측 탭 개편)  ║
+// ║  ▼ 🆕 v26.0828.1 설정 모달 (드롭다운 패널 → 중앙 모달 + 탭 개편)       ║
+// ║  🆕 v26.0925.1 탭 4개 → 2개 (일반 / 캘린더)                          ║
 // ║                                                                  ║
-// ║  #settingsPanel 자체가 이제 .modal-bg 라 위치/배경은 그 CSS가 처리.   ║
-// ║  언어 드롭다운(select) 이 있으므로 다른 모달들처럼 modalAotBypass    ║
-// ║  로 alwaysOnTop 을 잠깐 풀어줘야 포커스/키보드 조작이 확실히 먹는다.   ║
-// ║  카테고리 관리 모달이 이 위에 겹쳐 열릴 수 있어 그 경우 bypass 유지.   ║
+// ║  #settingsPanel 자체가 .modal-bg 라 위치/배경은 그 CSS가 처리.       ║
+// ║  언어 드롭다운(select) 이 있으므로 다른 모달들처럼 showModal 로 열어   ║
+// ║  alwaysOnTop 을 잠깐 풀어야 포커스/키보드 조작이 확실히 먹는다.       ║
+// ║  카테고리 관리 / NextCloud 연결 모달이 이 위에 겹쳐 열릴 수 있는데     ║
+// ║  그 경우의 bypass 유지는 hideModal 이 알아서 한다.                    ║
+// ║  설정 모달은 ✕ / ⚙ / Esc / 바깥 우클릭으로만 닫힌다 — 다른 앱을       ║
+// ║  클릭해 포커스를 잃어도 닫히지 않음 (Google 로그인 중 사라지던 버그).   ║
 // ╚══════════════════════════════════════════════════════════════════╝
 
 /** 설정 모달 열기 */
 function openSettingsModal() {
-  if (isElectron && window.electronAPI.modalAotBypass) {
-    window.electronAPI.modalAotBypass(true).catch(() => {});
-  }
-  document.getElementById('settingsPanel').classList.add('show');
+  showModal('settingsPanel');
+  // 캘린더 탭의 카테고리/캘린더 목록 채우기.
+  // 원격 목록은 한 번 불러오면 캐시되고, 여기선 저장된 선택 상태만 다시 맞춘다.
+  refreshAccountPane().catch(err => console.error('refreshAccountPane failed:', err));
 }
 
-/** 설정 모달 닫기. 이미 닫혀있으면 아무것도 안 함(다른 곳 클릭할 때마다 방어적으로
- *  호출되므로, 매번 IPC 를 부르지 않게 guard). */
+/** 설정 모달 닫기 (이미 닫혀있으면 no-op) */
 function closeSettingsModal() {
-  const panel = document.getElementById('settingsPanel');
-  if (!panel.classList.contains('show')) return;
-  panel.classList.remove('show');
-  if (isElectron && window.electronAPI.modalAotBypass) {
-    // 카테고리 관리 모달이 이 위에서 열려있으면 bypass 유지 (그쪽이 닫힐 때 최종 복원)
-    const keepBypass = document.getElementById('catModalBg').classList.contains('show');
-    window.electronAPI.modalAotBypass(keepBypass).catch(() => {});
-  }
+  hideModal('settingsPanel');
 }
 
 // ─── 설정 버튼 (⚙) → 설정 모달 열기/닫기 ───
@@ -4231,7 +4295,8 @@ document.getElementById('languageSelect').addEventListener('change', async (e) =
   renderMemos();
   renderCategorySummary();
   renderDefaultTargetLabel();
-  await refreshGoogleAuthStatus();
+  renderAcctCatList();          // 🆕 v26.0925.1
+  await refreshGoogleAuthStatus();      // 인라인 캘린더 목록도 같이 다시 그려짐
   await refreshNextcloudAuthStatus();
 });
 
@@ -4259,10 +4324,10 @@ document.getElementById('eventWrapToggle').addEventListener('change', async e =>
 // 🆕 v26.5.9b 테마 토글 (Light / Dark) — 클릭 시 즉시 적용 + 캘린더 재렌더 (이벤트 칩 색 갱신)
 document.querySelectorAll('.theme-btn').forEach(btn => {
   btn.addEventListener('click', async () => {
-    const t = btn.dataset.theme;
-    if (t !== 'light' && t !== 'dark') return;
-    if (state.theme === t) return;
-    state.theme = t;
+    const theme = btn.dataset.theme;
+    if (theme !== 'light' && theme !== 'dark') return;
+    if (state.theme === theme) return;
+    state.theme = theme;
     applyTheme();
     renderCalendar();
     await saveSettings();
@@ -4277,29 +4342,39 @@ document.getElementById('lockToggle').addEventListener('change', async e => {
 });
 
 
-// ─── 설정 패널 "🔄 동기화" 헤더 클릭 → 즉시 동기화 ───
-// ?. 는 syncHeader 요소가 없으면 안 죽게 하는 안전장치
-document.getElementById('syncHeader')?.addEventListener('click', () => {
-  triggerSyncAll();
+// ─── 설정 > 캘린더 탭 "지금 동기화" 버튼 ───
+// 🆕 v26.0925.1 제목(h4) 클릭이라는 보이지 않는 동작 대신 버튼으로. 동기화가 도는 동안은
+//   버튼을 잠가 중복 클릭 방지. 캘린더 목록도 서버에서 다시 받아옴 (원격에서 새 캘린더를 만든 경우 반영).
+document.getElementById('syncNowBtn').addEventListener('click', async (e) => {
+  const btn = e.currentTarget;
+  btn.disabled = true;
+  try {
+    await Promise.all([
+      triggerSyncAll(),
+      refreshAccountPane({ reload: true }).catch(() => {}),
+    ]);
+  } finally {
+    btn.disabled = false;
+  }
 });
 
 
 // ─── Google 인증 버튼 (🆕 멀티 캘린더) ───
 // 동작:
-//  - 미연결: OAuth 시작 → 성공 시 캘린더 선택 모달 자동 오픈
-//  - 연결됨: 캘린더 관리 모달 오픈 (재선택 또는 연결 해제)
+//  - 미연결: OAuth 시작 → 성공 시 캘린더 탭의 인라인 캘린더 목록을 불러옴
+//  - 연결됨: 연결 해제 (🆕 v26.0925.1 — 캘린더 선택은 인라인 목록이 담당)
 document.getElementById('googleAuthBtn').addEventListener('click', async (e) => {
   e.stopPropagation();
   // 🆕 v26.5.7-fix: 다른 모달 정리 (z-index 충돌 방지)
   closeAllCalendarModals();
   if (!isElectron) { toast(t('toast.electronOnly')); return; }
 
-  const btn = e.target;
+  const btn = e.currentTarget;
   const status = await window.electronAPI.authGoogleStatus();
 
   if (status.authenticated) {
-    // ─── 이미 연결됨 → 캘린더 관리 모달 ───
-    await openGoogleCalendarSelectModal();
+    // ─── 이미 연결됨 → 연결 해제 ───
+    await revokeAccount('google');
   } else {
     // ─── 미연결 → OAuth 시작 ───
     btn.disabled = true;
@@ -4310,8 +4385,9 @@ document.getElementById('googleAuthBtn').addEventListener('click', async (e) => 
       if (result.ok) {
         toast(t('toast.googleConnectedFmt', { email: result.email }));
         await refreshGoogleAuthStatus();
-        // 인증 직후 캘린더 선택 모달 자동 오픈
-        await openGoogleCalendarSelectModal();
+        // 🆕 v26.0925.1 인증 직후엔 모달 대신 인라인 목록을 채워서 바로 체크하게 한다
+        await loadAcctList('google', { force: true });
+        toast(t('acct.pickCalendars'), 3500);
       } else {
         toast(t('toast.googleConnectFail', { err: result.error }), 4000);
       }
@@ -4326,110 +4402,281 @@ document.getElementById('googleAuthBtn').addEventListener('click', async (e) => 
 
 
 // ╔══════════════════════════════════════════════════════════════════╗
-// ║  ▼ Google 캘린더 선택 모달 (🆕)                                     ║
+// ║  ▼ 🆕 v26.0925.1 설정 > "캘린더" 탭의 인라인 목록                    ║
 // ║                                                                  ║
-// ║  체크박스 = 동기화에 포함                                           ║
-// ║  ⭐ 별 = 새 일정의 기본 저장 위치 (1개만)                           ║
+// ║  구 "동기화 설정" 모달(Google 캘린더 선택 / NextCloud 관리)을 대체.   ║
+// ║  설정 화면을 떠나지 않고 바로:                                      ║
+// ║   - 로컬 달력 카테고리 확인 + ★ 기본 위치 지정                      ║
+// ║   - 원격 캘린더 체크(동기화 on/off) / 색상 / ⭐ 대표 / ★ 기본 위치   ║
+// ║                                                                  ║
+// ║  Google/NextCloud 는 키(id/url)와 저장 형식만 다르고 UI 동작은 같아   ║
+// ║  ACCT_REMOTE 어댑터에 차이점만 적고, 로드/렌더/저장/해제 함수는       ║
+// ║  source 인자를 받는 공용 함수 한 벌만 둔다.                          ║
+// ║                                                                  ║
+// ║  ⚠ 모달의 "저장" 버튼이 없어졌으므로 모든 조작은 즉시 반영된다.       ║
+// ║    (체크 변경 = 선택 목록 저장 + 재동기화, 색상 = 저장만)            ║
 // ╚══════════════════════════════════════════════════════════════════╝
 
-const gcalModalBg = document.getElementById('gcalModalBg');
-
-// 모달이 열려있을 때 사용자가 만지작거리는 임시 선택 상태
-// 형식: [{ id, summary, backgroundColor, isPrimary, _checked }]
-let gcalDraft = [];
+/**
+ * 원격 source 별 어댑터. 행(row)은 공통 형식으로 정규화해서 다룬다:
+ *   { key, name, originalColor, customColor, _checked, isPrimary }
+ *   - key: google = calendarId, nextcloud = url
+ *   - _checked 가 곧 "동기화 대상(selectedCalendars 에 포함)" 여부
+ */
+const ACCT_REMOTE = {
+  google: {
+    listId: 'acctGcalList',
+    fallbackColor: '#4285f4',
+    errorKey: 'cal.fetchErrorHtml',
+    resetTitleKey: 'cal.colorResetTitle',
+    confirmKey: 'confirm.googleDisconnect',
+    disconnectedKey: 'toast.googleDisconnected',
+    isAuthed:  () => state.googleAuthenticated,
+    selected:  () => state.googleSelectedCalendars || [],
+    keyOf:     c => c.id,
+    fetchAll:  () => window.electronAPI.googleListCalendars(),
+    // 서버 응답이 없을 때 저장된 선택 항목(s)만으로 행을 만들기 위한 변환
+    fromSaved: s => ({ id: s.id, summary: s.summary, backgroundColor: s.backgroundColor }),
+    // 원본색: Google 은 서버가 주는 backgroundColor
+    originalColorOf: (c, saved) => c.backgroundColor || (saved && saved.backgroundColor) || '#4285f4',
+    // 행 → 저장 형식 (selectedCalendars 의 한 항목)
+    toSelected: r => ({ id: r.key, summary: r.name, backgroundColor: r.originalColor, customColor: r.customColor, isPrimary: r.isPrimary }),
+    save:      picked => window.electronAPI.googleSetSelectedCalendars(picked),
+    refresh:   () => refreshGoogleAuthStatus(),
+    resync:    () => syncFromGoogle(),
+    revoke:    () => window.electronAPI.authGoogleRevoke(),
+    // 연결 해제 시 Google 만 추가로 정리할 것: Tasks 에서 가져온 메모
+    afterRevoke: async () => {
+      state.memos = state.memos.filter(m => m.source !== 'gtasks');
+      await saveMemos();
+      renderMemos();
+    },
+  },
+  nextcloud: {
+    listId: 'acctNcList',
+    fallbackColor: '#0082c9',
+    errorKey: 'cal.fetchErrorNcHtml',
+    resetTitleKey: 'cal.colorResetTitleNc',
+    confirmKey: 'confirm.nextcloudDisconnect',
+    disconnectedKey: 'toast.nextcloudDisconnected',
+    isAuthed:  () => !!state.nextcloudUsername,
+    selected:  () => state.nextcloudSelectedCalendars || [],
+    keyOf:     c => c.url,
+    fetchAll:  () => window.electronAPI.nextcloudListCalendars(),
+    fromSaved: s => ({ url: s.url, displayName: s.displayName, color: s.originalColor }),
+    // 원본색 우선순위 = 서버 응답 > 저장된 originalColor > NextCloud 브랜드색
+    originalColorOf: (c, saved) => c.color || (saved && saved.originalColor) || '#0082c9',
+    toSelected: r => ({ url: r.key, displayName: r.name, originalColor: r.originalColor, customColor: r.customColor, isPrimary: r.isPrimary }),
+    save:      picked => window.electronAPI.nextcloudSetSelectedCalendars(picked),
+    refresh:   () => refreshNextcloudAuthStatus(),
+    resync:    () => syncFromNextcloud(),
+    revoke:    () => window.electronAPI.authNextcloudRevoke(),
+    afterRevoke: async () => {},
+  },
+};
+// source 별 런타임 상태: 행 목록 / 목록 조회 오류 / 로딩 중 / 저장·재동기화 debounce 타이머
+for (const a of Object.values(ACCT_REMOTE)) {
+  a.rows = []; a.error = null; a.loading = false; a.colorTimer = null; a.resyncTimer = null;
+}
 
 /**
- * 🆕 캘린더 목록 조회가 실패해도 모달을 열어서 "연결 해제"는 가능하게 함.
- *  - API 성공: 모든 캘린더 표시
- *  - API 실패: 저장된 selected만 표시 + 에러 안내 박스
- *  - selected도 없으면: 빈 안내 + 연결 해제 버튼만
+ * 캘린더 탭 전체 갱신. 설정 모달을 열 때 / 동기화 헤더를 누를 때 호출.
+ * @param {object} [opts]
+ * @param {boolean} [opts.reload]  true면 원격 캘린더 목록을 서버에서 다시 가져옴
  */
-async function openGoogleCalendarSelectModal() {
-  // 저장된 선택 목록 (로컬 store라 토큰 권한과 무관하게 항상 읽힘)
-  const selected = await window.electronAPI.googleGetSelectedCalendars() || [];
-  const selectedIds = new Set(selected.map(c => c.id));
-  const primaryId = (selected.find(c => c.isPrimary) || {}).id;
+async function refreshAccountPane(opts = {}) {
+  renderAcctCatList();
+  renderCategorySummary();
+  await loadAcctList('google',    { force: !!opts.reload });
+  await loadAcctList('nextcloud', { force: !!opts.reload });
+}
 
-  // 캘린더 목록 가져오기 (실패할 수 있음)
-  let allCals = [];
-  let listError = null;
+
+// ─────────────────────────────────────────────────────────────────
+//  로컬 달력 카테고리 (읽기 전용 목록 + ★ 기본 위치)
+//  이름/색/추가/삭제 편집은 "관리" 버튼 → 카테고리 관리 모달에서.
+// ─────────────────────────────────────────────────────────────────
+
+/** 같은 이름의 원격 캘린더가 선택돼 있으면 "연동됨" 뱃지 (이름이 곧 연결 키).
+ *  캘린더 탭의 목록과 카테고리 관리 모달이 함께 쓴다. */
+function catLinkBadgeHtml(name) {
+  const linked = [];
+  if (state.googleAuthenticated    && findCalendarByName('google', name))    linked.push('G');
+  if (state.nextcloudAuthenticated && findCalendarByName('nextcloud', name)) linked.push('NC');
+  return linked.length
+    ? `<span class="cat-link-badge linked" title="${t('cat.linkedBadgeTitle')}">🔗 ${linked.join('·')}</span>`
+    : `<span class="cat-link-badge unlinked" title="${t('cat.unlinkedBadgeTitle')}">${t('cat.unlinkedBadgeLabel')}</span>`;
+}
+
+function renderAcctCatList() {
+  const list = document.getElementById('acctCatList');
+  if (!list) return;
+
+  const noneIsDefault = isDefaultTarget('local', null);
+  let html = `
+    <div class="cal-select-item cat-none-row">
+      <span class="cat-none-swatch" title="${t('cat.noneSwatchTitle')}"></span>
+      <span class="cat-none-label">${t('category.none')}</span>
+      <button class="cal-default-star ${noneIsDefault ? 'active' : ''}" data-cat="" title="${t('cat.starTitleNone')}">
+        ${noneIsDefault ? '★' : '☆'}
+      </button>
+    </div>
+  `;
+
+  html += (state.categories || []).map(c => {
+    const isDefault = isDefaultTarget('local', c.id);
+    return `
+    <div class="cal-select-item">
+      <span class="cal-color-dot" style="background:${escapeHtml(c.color || '#34a853')}"></span>
+      <span class="cal-name">${escapeHtml(c.name)}</span>
+      ${catLinkBadgeHtml(c.name)}
+      <button class="cal-default-star ${isDefault ? 'active' : ''}" data-cat="${escapeHtml(c.id)}" title="${t('cat.starTitleRow')}">
+        ${isDefault ? '★' : '☆'}
+      </button>
+    </div>
+  `;
+  }).join('');
+
+  list.innerHTML = html;
+
+  list.querySelectorAll('.cal-default-star').forEach(star => {
+    star.addEventListener('click', async e => {
+      e.stopPropagation();
+      const id = star.dataset.cat || null;
+      const wasDefault = isDefaultTarget('local', id);
+      await setDefaultTarget(wasDefault ? null : 'local', wasDefault ? null : id);
+      renderAcctCatList();
+    });
+  });
+}
+
+document.getElementById('acctCatManageBtn').addEventListener('click', e => {
+  e.stopPropagation();
+  closeAllCalendarModals();
+  openCategoryModal();
+});
+
+
+// ─────────────────────────────────────────────────────────────────
+//  원격 캘린더 인라인 목록 (Google / NextCloud 공용)
+// ─────────────────────────────────────────────────────────────────
+
+/**
+ * 계정의 전체 캘린더를 가져와 행을 만든다.
+ * 목록 조회에 실패해도(권한/네트워크) 저장된 선택 목록만이라도 보여준다 —
+ * 그래야 색상/★ 조정과 연결 해제가 계속 가능하다.
+ */
+async function loadAcctList(source, opts = {}) {
+  const a = ACCT_REMOTE[source];
+  if (!isElectron || !a.isAuthed()) {
+    a.rows = []; a.error = null;
+    renderAcctList(source);
+    return;
+  }
+  // 이미 불러왔으면 재조회 없이 저장된 선택 상태만 다시 맞춤
+  if (a.rows.length && !opts.force) { syncAcctRowsFromState(source); return; }
+
+  a.loading = true;
+  renderAcctList(source);
+
+  const selected = a.selected();
+  let all = [], err = null;
   try {
-    const r = await window.electronAPI.googleListCalendars();
-    if (r.ok) {
-      allCals = r.calendars || [];
-    } else {
-      listError = r.error || t('err.unknown');
-    }
-  } catch (err) {
-    listError = err.message || String(err);
+    const r = await a.fetchAll();
+    if (r.ok) all = r.calendars || [];
+    else      err = r.error || t('err.unknown');
+  } catch (e) {
+    err = e.message || String(e);
   }
+  if (all.length === 0 && selected.length > 0) all = selected.map(a.fromSaved);
 
-  // 🆕 API 실패 시 저장된 selected 목록만이라도 보여주기 (연결 해제 가능하게)
-  if (allCals.length === 0 && selected.length > 0) {
-    allCals = selected.map(c => ({
-      id: c.id,
-      summary: c.summary,
-      backgroundColor: c.backgroundColor || '#4285f4',
-      primary: false
-    }));
-  }
-
-  // draft 초기화: 저장된 customColor 우선
-  gcalDraft = allCals.map(c => {
-    const saved = selected.find(s => s.id === c.id);
+  const primaryKey = a.keyOf(selected.find(c => c.isPrimary) || {});
+  a.rows = all.map(c => {
+    const key   = a.keyOf(c);
+    const saved = selected.find(s => a.keyOf(s) === key);
+    const originalColor = a.originalColorOf(c, saved);
     return {
-      id: c.id,
-      summary: c.summary,
-      backgroundColor: c.backgroundColor,
-      customColor: (saved && saved.customColor) || c.backgroundColor || '#4285f4',
-      _checked: selectedIds.has(c.id),
-      isPrimary: c.id === primaryId
+      key,
+      name: calDisplayName(c, source),
+      originalColor,
+      customColor: (saved && saved.customColor) || originalColor,
+      _checked: !!saved,
+      isPrimary: key === primaryKey
     };
   });
-
-  renderGcalList(listError);
-  gcalModalBg.classList.add('show');
+  a.error = err;
+  a.loading = false;
+  renderAcctList(source);
 }
 
-function closeGcalModal() {
-  gcalModalBg.classList.remove('show');
-  gcalDraft = [];
+/** 저장된 선택 목록 기준으로 행들의 체크/⭐/색을 맞춤 (서버 재조회 없음) */
+function syncAcctRowsFromState(source) {
+  const a = ACCT_REMOTE[source];
+  if (a.rows.length) {
+    const selected = a.selected();
+    a.rows.forEach(row => {
+      const saved = selected.find(s => a.keyOf(s) === row.key);
+      row._checked  = !!saved;
+      row.isPrimary = !!(saved && saved.isPrimary);
+      if (saved && saved.customColor) row.customColor = saved.customColor;
+    });
+  }
+  renderAcctList(source);
 }
 
-/**
- * 🆕 변경점:
- *  - listError 인자 받아서 모달 상단에 안내 박스 표시
- *  - 캘린더별 색상 input(컬러피커) 추가 — 클릭하면 native color picker
- *  - 빈 목록일 때도 안내 메시지로 변경 (연결 해제는 여전히 가능)
- */
-function renderGcalList(listError) {
-  const list = document.getElementById('gcalList');
+/** 체크된 행들을 선택 목록으로 저장. resync=true면 그 source 의 일정을 비우고 재동기화 */
+async function applyAcctSelection(source, opts = {}) {
+  const a = ACCT_REMOTE[source];
+  const picked = a.rows.filter(r => r._checked).map(a.toSelected);
 
-  // 🆕 에러 안내 박스
-  let errorBox = '';
-  if (listError) {
-    errorBox = `
-      <div class="cal-select-error">
-        ${t('cal.fetchErrorHtml', { msg: escapeHtml(listError) })}
-      </div>
-    `;
+  await a.save(picked);
+  await a.refresh();       // 색상 캐시 재빌드 + 인라인 목록 재렌더
+  renderCalendar();        // 색상 즉시 반영
+
+  if (opts.resync) {
+    // 선택 셋이 바뀐 경우 — 기존 일정을 비우고 새 셋으로 다시 받음.
+    // 체크를 연달아 여러 개 바꿀 때 매번 전체 동기화가 돌지 않게 잠깐 모아서 1회만.
+    state.events = state.events.filter(e => e.source !== source);
+    await saveEvents();
+    renderCalendar();
+    clearTimeout(a.resyncTimer);
+    a.resyncTimer = setTimeout(() => a.resync(), 800);
+  }
+}
+
+function renderAcctList(source) {
+  const a = ACCT_REMOTE[source];
+  const list = document.getElementById(a.listId);
+  if (!list) return;
+
+  if (!a.isAuthed()) {
+    list.innerHTML = `<div class="cal-select-empty">${t('acct.connectFirst')}</div>`;
+    return;
+  }
+  if (a.loading) {
+    list.innerHTML = `<div class="acct-cal-loading">${t('acct.loading')}</div>`;
+    return;
   }
 
-  if (gcalDraft.length === 0) {
+  const errorBox = a.error
+    ? `<div class="cal-select-error">${t(a.errorKey, { msg: escapeHtml(a.error) })}</div>`
+    : '';
+
+  if (a.rows.length === 0) {
     list.innerHTML = errorBox + `<div class="cal-select-empty">${t('cal.empty')}</div>`;
     return;
   }
 
-  list.innerHTML = errorBox + gcalDraft.map((c, i) => {
-    const isDefault = isDefaultTarget('google', c.id);   // 🆕 v26.5.9f
+  list.innerHTML = errorBox + a.rows.map((r, i) => {
+    const isDefault = isDefaultTarget(source, r.key);
     return `
     <div class="cal-select-item" data-idx="${i}">
-      <input type="checkbox" class="cal-check" ${c._checked ? 'checked' : ''}>
-      <input type="color" class="cal-color-input" value="${escapeHtml(c.customColor)}" title="${t('cal.colorChangeTitle')}">
-      <span class="cal-name">${escapeHtml(calDisplayName(c, 'google'))}</span>
-      <button class="cal-color-reset" title="${t('cal.colorResetTitle')}">↺</button>
-      <button class="cal-star ${c.isPrimary ? 'active' : ''}" title="${t('cal.starPrimaryTitle')}">
-        ${c.isPrimary ? '⭐' : '☆'}
+      <input type="checkbox" class="cal-check" ${r._checked ? 'checked' : ''} title="${t('acct.calCheckTitle')}">
+      <input type="color" class="cal-color-input" value="${escapeHtml(r.customColor)}" title="${t('cal.colorChangeTitle')}">
+      <span class="cal-name">${escapeHtml(r.name)}</span>
+      <button class="cal-color-reset" title="${t(a.resetTitleKey)}">↺</button>
+      <button class="cal-star ${r.isPrimary ? 'active' : ''}" title="${t('cal.starPrimaryTitle')}">
+        ${r.isPrimary ? '⭐' : '☆'}
       </button>
       <button class="cal-default-star ${isDefault ? 'active' : ''}" title="${t('cal.starDefaultTitle')}">
         ${isDefault ? '★' : '☆'}
@@ -4438,125 +4685,97 @@ function renderGcalList(listError) {
   `;
   }).join('');
 
+  // 행 안의 컨트롤 → 그 행 객체
+  const rowOf = el => a.rows[parseInt(el.closest('.cal-select-item').dataset.idx, 10)];
+
+  // 체크 = 동기화 on/off — 즉시 저장 + 재동기화
   list.querySelectorAll('.cal-check').forEach(cb => {
-    cb.addEventListener('change', () => {
-      const item = cb.closest('.cal-select-item');
-      const i = parseInt(item.dataset.idx, 10);
-      gcalDraft[i]._checked = cb.checked;
-      if (!cb.checked && gcalDraft[i].isPrimary) {
-        gcalDraft[i].isPrimary = false;
-        const next = gcalDraft.find(x => x._checked);
+    cb.addEventListener('change', async () => {
+      const row = rowOf(cb);
+      row._checked = cb.checked;
+      // 대표(⭐)를 껐으면 다른 체크된 캘린더로 넘기고, 대표가 없는 상태의 첫 체크면 그 캘린더를 대표로
+      if (!cb.checked && row.isPrimary) {
+        row.isPrimary = false;
+        const next = a.rows.find(x => x._checked);
         if (next) next.isPrimary = true;
       }
-      renderGcalList(listError);
+      if (cb.checked && !a.rows.some(x => x.isPrimary)) row.isPrimary = true;
+      toast(cb.checked ? t('toast.calendarSyncOnFmt', { name: row.name }) : t('toast.calendarSyncOffFmt', { name: row.name }));
+      await applyAcctSelection(source, { resync: true });
     });
   });
 
-  // 🆕 색상 picker — input 이벤트로 즉시 draft 갱신 (재렌더 안 함, 포커스 보존)
+  // 색상 — 드래그 중엔 행만 갱신하고 저장은 debounce (재렌더 X, 피커 포커스 보존)
   list.querySelectorAll('.cal-color-input').forEach(inp => {
     inp.addEventListener('input', () => {
-      const i = parseInt(inp.closest('.cal-select-item').dataset.idx, 10);
-      gcalDraft[i].customColor = inp.value;
+      const row = rowOf(inp);
+      row.customColor = inp.value;
+      if (!row._checked) return;   // 미선택 캘린더는 저장할 곳이 없음
+      clearTimeout(a.colorTimer);
+      a.colorTimer = setTimeout(() => applyAcctSelection(source), 400);
     });
   });
 
-  // 🆕 색상 리셋 (↺) — 원래 Google backgroundColor로 복원
+  // 색상 리셋 (↺) — 원래 색으로
   list.querySelectorAll('.cal-color-reset').forEach(btn => {
-    btn.addEventListener('click', e => {
+    btn.addEventListener('click', async e => {
       e.stopPropagation();
-      const i = parseInt(btn.closest('.cal-select-item').dataset.idx, 10);
-      gcalDraft[i].customColor = gcalDraft[i].backgroundColor || '#4285f4';
-      renderGcalList(listError);
+      const row = rowOf(btn);
+      row.customColor = row.originalColor || a.fallbackColor;
+      if (row._checked) await applyAcctSelection(source);
+      else renderAcctList(source);
     });
   });
 
+  // ⭐ 노란 별 — 이 계정의 대표 캘린더 (일정 모달 드롭다운의 기본 선택)
   list.querySelectorAll('.cal-star').forEach(star => {
-    star.addEventListener('click', (e) => {
+    star.addEventListener('click', async e => {
       e.stopPropagation();
-      const item = star.closest('.cal-select-item');
-      const i = parseInt(item.dataset.idx, 10);
-      if (!gcalDraft[i]._checked) { toast(t('toast.checkFirst')); return; }
-      gcalDraft.forEach(x => x.isPrimary = false);
-      gcalDraft[i].isPrimary = true;
-      renderGcalList(listError);
+      const row = rowOf(star);
+      if (!row._checked) { toast(t('toast.checkFirst')); return; }
+      a.rows.forEach(x => x.isPrimary = false);
+      row.isPrimary = true;
+      await applyAcctSelection(source);
     });
   });
 
-  // 🆕 v26.5.9f 주황 별표 — 새 일정의 전체 기본 위치 (3 source 통합 단일).
+  // ★ 주황 별 — 새 일정의 전체 기본 위치 (3 source 통합 단일)
   list.querySelectorAll('.cal-default-star').forEach(star => {
-    star.addEventListener('click', async (e) => {
+    star.addEventListener('click', async e => {
       e.stopPropagation();
-      const item = star.closest('.cal-select-item');
-      const i = parseInt(item.dataset.idx, 10);
-      if (!gcalDraft[i]._checked) { toast(t('toast.checkFirst')); return; }
-      const wasDefault = isDefaultTarget('google', gcalDraft[i].id);
-      await setDefaultTarget(wasDefault ? null : 'google', gcalDraft[i].id);
-      renderGcalList(listError);
+      const row = rowOf(star);
+      if (!row._checked) { toast(t('toast.checkFirst')); return; }
+      const wasDefault = isDefaultTarget(source, row.key);
+      await setDefaultTarget(wasDefault ? null : source, row.key);
+      renderAcctList(source);
     });
   });
 }
 
-gcalModalBg.addEventListener('click', e => {
-  if (e.target.id === 'gcalModalBg') closeGcalModal();
-});
-document.getElementById('gcalCancel').addEventListener('click', closeGcalModal);
-
-document.getElementById('gcalSave').addEventListener('click', async () => {
-  const picked = gcalDraft.filter(c => c._checked).map(c => ({
-    id: c.id,
-    summary: calDisplayName(c, 'google'),
-    backgroundColor: c.backgroundColor,
-    customColor: c.customColor,        // 🆕
-    isPrimary: c.isPrimary
-  }));
-
-  // 🆕 색상만 변경됐는지 체크 (선택 셋이 같음 + 색만 다름) → 동기화 스킵
-  const oldList = state.googleSelectedCalendars;
-  const sameSelection = picked.length === oldList.length
-    && picked.every(p => oldList.some(o => o.id === p.id && o.isPrimary === p.isPrimary));
-
-  if (picked.length === 0) {
-    if (!confirm(t('confirm.googleNoSelection'))) return;
-  }
-
-  await window.electronAPI.googleSetSelectedCalendars(picked);
-  closeGcalModal();
-  await refreshGoogleAuthStatus();   // calendarColors 캐시 재빌드
-  toast(t('toast.googleCalendarsSavedFmt', { n: picked.length }));
-
-  renderCalendar();   // 🆕 색상 즉시 반영
-
-  // 캘린더 셋이 바뀐 경우만 재동기화 (색상만 바꿨으면 스킵)
-  if (!sameSelection) {
-    state.events = state.events.filter(e => e.source !== 'google');
-    await saveEvents();
-    renderCalendar();
-    setTimeout(() => syncFromGoogle(), 300);
-  }
-});
-
-// 연결 해제 링크
-document.getElementById('gcalRevoke').addEventListener('click', async () => {
-  if (!confirm(t('confirm.googleDisconnect'))) return;
+/**
+ * 계정 연결 해제 (확인 → 토큰/자격증명 폐기 → 가져온 일정 정리).
+ * 캘린더 탭의 "연결 해제" 버튼이 호출.
+ */
+async function revokeAccount(source) {
+  const a = ACCT_REMOTE[source];
+  if (!confirm(t(a.confirmKey))) return;
   try {
-    await window.electronAPI.authGoogleRevoke();
-    state.events = state.events.filter(e => e.source !== 'google');
-    state.memos  = state.memos.filter(m  => m.source !== 'gtasks');
-    // 🆕 동기화 범위 초기화
-    state.syncedRange.google = { start: null, end: null };
+    await a.revoke();
+    state.events = state.events.filter(e => e.source !== source);
+    state.syncedRange[source] = { start: null, end: null };   // 동기화 범위 초기화
     saveSyncedRange();
     await saveEvents();
-    await saveMemos();
-    closeGcalModal();
+    await a.afterRevoke();
+    a.rows = []; a.error = null;
     renderCalendar();
-    renderMemos();
-    toast(t('toast.googleDisconnected'));
+    toast(t(a.disconnectedKey));
   } catch (err) {
     toast(t('toast.disconnectFail', { err: err.message }));
   } finally {
-    await refreshGoogleAuthStatus();
+    await a.refresh();
+    renderAcctCatList();   // 연동 뱃지(🔗 G / NC) 갱신
   }
-});
+}
 
 
 // ╔══════════════════════════════════════════════════════════════════╗
@@ -4592,28 +4811,15 @@ function openCategoryModal(opts = {}) {
   catOpenedFromEventModal = !!opts.fromEventModal;
   catDraft = (state.categories || []).map(c => ({ id: c.id, name: c.name, color: c.color }));
   renderCatList();
-  // alwaysOnTop 임시 해제 + 포커스 (이름 input 에 타이핑 되게)
-  if (isElectron && window.electronAPI.modalAotBypass) {
-    window.electronAPI.modalAotBypass(true).catch(() => {});
-  }
-  catModalBg.classList.add('show');
+  showModal('catModalBg');   // alwaysOnTop 임시 해제 + 포커스 (이름 input 에 타이핑 되게)
   if (opts.addRow) addCategoryRow();
 }
 
 function closeCategoryModal() {
-  catModalBg.classList.remove('show');
+  // 일정 모달/설정 모달 위에서 열렸으면 hideModal 이 bypass 를 유지해준다
+  // (풀어버리면 아직 떠있는 아래 모달의 텍스트 입력이 먹통이 된다).
+  hideModal('catModalBg');
   catDraft = [];
-  if (isElectron && window.electronAPI.modalAotBypass) {
-    // 🆕 v26.7.22 일정 모달 위에서 열렸으면 AOT 를 복원하면 안 됨 —
-    //   복원해버리면 아직 떠있는 일정 모달의 텍스트 입력이 먹통이 된다.
-    //   (bypass(true) 를 다시 걸어 포커스도 일정 모달로 돌려줌)
-    // 🆕 v26.0828.1 설정 모달의 "관리" 버튼으로 열렸을 때도 마찬가지 —
-    //   설정 모달이 아직 떠있으면 bypass 를 풀면 안 됨.
-    const keepBypass =
-      (catOpenedFromEventModal && document.getElementById('eventModalBg').classList.contains('show')) ||
-      document.getElementById('settingsPanel').classList.contains('show');
-    window.electronAPI.modalAotBypass(keepBypass).catch(() => {});
-  }
   catOpenedFromEventModal = false;
 }
 
@@ -4660,13 +4866,7 @@ function renderCatList() {
   }
 
   html += catDraft.map((c, i) => {
-    // 같은 이름의 원격 캘린더가 선택돼 있으면 "연동됨" 뱃지
-    const linked = [];
-    if (state.googleAuthenticated    && findCalendarByName('google', c.name))    linked.push('G');
-    if (state.nextcloudAuthenticated && findCalendarByName('nextcloud', c.name)) linked.push('NC');
-    const badge = linked.length
-      ? `<span class="cat-link-badge linked" title="${t('cat.linkedBadgeTitle')}">🔗 ${linked.join('·')}</span>`
-      : `<span class="cat-link-badge unlinked" title="${t('cat.unlinkedBadgeTitle')}">${t('cat.unlinkedBadgeLabel')}</span>`;
+    const badge = catLinkBadgeHtml(c.name);   // 같은 이름의 원격 캘린더가 있으면 "연동됨"
     const isDefault = isDefaultTarget('local', c.id);
 
     return `
@@ -4785,6 +4985,7 @@ document.getElementById('catSave').addEventListener('click', async () => {
 
   closeCategoryModal();
   renderCategorySummary();
+  renderAcctCatList();          // 🆕 v26.0925.1 캘린더 탭의 카테고리 목록도 갱신
   renderCalendar();   // 색상 즉시 반영
   renderDefaultTargetLabel();   // 🆕 v26.0728.1 카테고리 이름 변경/삭제가 기본 위치 라벨에 반영되게
 
@@ -4800,9 +5001,9 @@ document.getElementById('catSave').addEventListener('click', async () => {
   toast(cleaned.length === 0 ? t('toast.categoriesClearedAll') : t('toast.categoriesSavedFmt', { n: cleaned.length }));
 });
 
-/** 설정 패널의 카테고리 요약 라벨 갱신 ("업무 · 개인 · 가족") */
+/** 설정 > 캘린더 탭의 카테고리 요약 라벨 갱신 ("업무 · 개인 · 가족") */
 function renderCategorySummary() {
-  const el = document.getElementById('categorySummary');
+  const el = document.getElementById('acctCatSummary');
   if (!el) return;
   const cats = state.categories || [];
   el.textContent = cats.length === 0
@@ -4810,71 +5011,48 @@ function renderCategorySummary() {
     : cats.slice(0, 3).map(c => c.name).join(' · ') + (cats.length > 3 ? t('category.summaryMoreFmt', { n: cats.length - 3 }) : '');
 }
 
-document.getElementById('categoryManageBtn').addEventListener('click', e => {
-  e.stopPropagation();
-  closeAllCalendarModals();
-  openCategoryModal();
-});
-
 
 // ╔══════════════════════════════════════════════════════════════════╗
-// ║  ▼ NextCloud 인증 + 캘린더 선택 모달                                ║
+// ║  ▼ NextCloud 인증 모달 (서버주소/ID/앱비밀번호)                      ║
 // ║                                                                  ║
-// ║  2단계 모달:                                                       ║
-// ║   ① 서버주소/ID/비밀번호 입력 (#ncStep1)                            ║
-// ║   ② 인증 성공 후 캘린더 선택 (#ncStep2)                             ║
+// ║  🆕 v26.0925.1 인증 후의 "캘린더 선택" 단계(구 ncStep2)는 삭제 —     ║
+// ║    설정 > 캘린더 탭의 인라인 목록이 그 역할을 대신한다.             ║
 // ╚══════════════════════════════════════════════════════════════════╝
 
-// 모달 요소들 캐시 (자주 쓰니까)
 const ncModalBg = document.getElementById('ncModalBg');
-const ncStep1   = document.getElementById('ncStep1');
-const ncStep2   = document.getElementById('ncStep2');
 
-/** NextCloud 모달 열기. step1=서버 입력, step2=캘린더 선택 */
-function openNcModal(step1 = true) {
-  ncStep1.style.display = step1 ? 'block' : 'none';
-  ncStep2.style.display = step1 ? 'none'  : 'block';
-  ncModalBg.classList.add('show');
-}
-
-/**
- * 🆕 v26.5.7-fix: 다른 모달이 떠있을 때 새 모달 열기 전 정리.
- *  관리 모달이 안 닫힌 채로 step1을 열면 z-index 충돌로 입력이 막히는 버그 방지.
- *  - 모든 NextCloud/Google 캘린더 관련 모달의 .show 클래스 제거
- *  - draft 상태도 같이 비움 (이전 선택 잔존 방지)
- */
-function closeAllCalendarModals() {
-  // NextCloud
-  document.getElementById('ncModalBg')?.classList.remove('show');
-  document.getElementById('ncManageModalBg')?.classList.remove('show');
-  ncManageDraft = [];
-  // Google
-  document.getElementById('gcalModalBg')?.classList.remove('show');
-  gcalDraft = [];
-  // 🆕 v26.7.22 카테고리
-  document.getElementById('catModalBg')?.classList.remove('show');
-  catDraft = [];
+/** NextCloud 인증 모달 열기 (텍스트 input 이 있으므로 showModal 로 — alwaysOnTop 우회) */
+function openNcModal() {
+  showModal('ncModalBg');
 }
 
 /** NextCloud 모달 닫기. 비밀번호 필드는 보안상 매번 비움 */
 function closeNcModal() {
-  ncModalBg.classList.remove('show');
+  hideModal('ncModalBg');
   document.getElementById('ncPass').value = '';
+}
+
+/**
+ * 🆕 v26.5.7-fix: 설정 위에 겹쳐 뜨는 모달(NextCloud 연결 / 카테고리 관리)을 새로 열기 전 정리.
+ *  안 닫힌 모달 위에 새 모달을 열면 z-index 충돌로 입력이 막히는 버그 방지.
+ *  (각각의 정식 close 함수를 거쳐야 비밀번호 비우기 / draft 초기화 / AOT 판단이 빠지지 않는다)
+ */
+function closeAllCalendarModals() {
+  closeNcModal();
+  closeCategoryModal();
 }
 
 // 모달 배경 클릭 → 닫기 (모달 박스 안 클릭은 무시)
 ncModalBg.addEventListener('click', e => {
   if (e.target.id === 'ncModalBg') closeNcModal();
 });
-// 두 단계 모두 "취소" 버튼은 그냥 닫기
 document.getElementById('ncCancel').addEventListener('click', closeNcModal);
-document.getElementById('ncCancel2').addEventListener('click', closeNcModal);
 
 
 // ─── NextCloud 연결 버튼 (🆕 멀티 캘린더) ───
 // 동작:
-//  - 미연결: step1 모달(서버/ID/비번) → 인증 성공 → step2(체크박스 멀티셀렉)
-//  - 연결됨: 관리 모달 (재선택 또는 연결 해제)
+//  - 미연결: step1 모달(서버/ID/비번) → 인증 성공 → 캘린더 탭의 인라인 목록
+//  - 연결됨: 연결 해제 (🆕 v26.0925.1 — 캘린더 선택은 인라인 목록이 담당)
 document.getElementById('nextcloudAuthBtn').addEventListener('click', async (e) => {
   e.stopPropagation();
   if (!isElectron) { toast(t('toast.electronOnly')); return; }
@@ -4885,19 +5063,19 @@ document.getElementById('nextcloudAuthBtn').addEventListener('click', async (e) 
   const status = await window.electronAPI.authNextcloudStatus();
 
   if (status.authenticated) {
-    await openNextcloudManageModal();
+    await revokeAccount('nextcloud');
   } else {
     document.getElementById('ncServer').value = '';
     document.getElementById('ncUser').value = '';
     document.getElementById('ncPass').value = '';
-    openNcModal(true);
+    openNcModal();
     setTimeout(() => document.getElementById('ncServer').focus(), 50);
   }
 });
 
 
-// ─── 모달 step1의 "연결" 버튼 ───
-// 입력값으로 인증 시도 → 성공하면 step2로 (멀티 셀렉)
+// ─── NextCloud 연결 모달의 "연결" 버튼 ───
+// 입력값으로 인증 시도 → 성공하면 모달을 닫고 캘린더 탭의 인라인 목록을 채움
 document.getElementById('ncConnect').addEventListener('click', async () => {
   const serverUrl = document.getElementById('ncServer').value.trim();
   const username  = document.getElementById('ncUser').value.trim();
@@ -4917,10 +5095,11 @@ document.getElementById('ncConnect').addEventListener('click', async () => {
       toast(t('toast.googleConnectFail', { err: r.error }), 4000);
       return;
     }
-    // 인증 성공 → step2로 (멀티셀렉 캘린더 목록)
-    initNcStep2Draft(r.calendars || []);
-    renderNcCalendarsMulti();
-    openNcModal(false);
+    // 🆕 v26.0925.1 인증 성공 → 모달을 닫고 캘린더 탭의 인라인 목록에서 캘린더를 고르게 한다
+    closeNcModal();
+    await refreshNextcloudAuthStatus();
+    await loadAcctList('nextcloud', { force: true });
+    toast(t('acct.pickCalendars'), 3500);
   } catch (err) {
     toast(t('toast.googleConnectFail', { err: err.message }), 4000);
   } finally {
@@ -4929,310 +5108,6 @@ document.getElementById('ncConnect').addEventListener('click', async () => {
   }
 });
 
-
-// ─── NextCloud step2 (멀티셀렉 + 별) ───
-// step1과 step2는 같은 모달의 두 단계. step2의 draft 상태는 모달 내부 변수로 관리.
-let ncStep2Draft = [];
-
-function initNcStep2Draft(calendars) {
-  // 첫 가입이라 모두 미체크. 첫 번째에 별 표시 (사용자가 바꿀 수 있음)
-  ncStep2Draft = calendars.map((c, i) => ({
-    url: c.url,
-    displayName: c.displayName,
-    _checked: false,
-    isPrimary: false
-  }));
-}
-
-function renderNcCalendarsMulti() {
-  const list = document.getElementById('ncCalendars');
-  if (ncStep2Draft.length === 0) {
-    list.innerHTML = `<div class="cal-select-empty">${t('cal.empty')}</div>`;
-    return;
-  }
-
-  list.innerHTML = ncStep2Draft.map((c, i) => {
-    const isDefault = isDefaultTarget('nextcloud', c.url);   // 🆕 v26.5.9f
-    return `
-    <div class="cal-select-item" data-idx="${i}">
-      <input type="checkbox" class="cal-check" ${c._checked ? 'checked' : ''}>
-      <span class="cal-color-dot" style="background:#0082c9"></span>
-      <span class="cal-name">${escapeHtml(calDisplayName(c, 'nextcloud'))}</span>
-      <button class="cal-star ${c.isPrimary ? 'active' : ''}" title="${t('cal.starPrimaryTitle')}">
-        ${c.isPrimary ? '⭐' : '☆'}
-      </button>
-      <button class="cal-default-star ${isDefault ? 'active' : ''}" title="${t('cal.starDefaultTitle')}">
-        ${isDefault ? '★' : '☆'}
-      </button>
-    </div>
-  `;
-  }).join('');
-
-  list.querySelectorAll('.cal-check').forEach(cb => {
-    cb.addEventListener('change', () => {
-      const i = parseInt(cb.closest('.cal-select-item').dataset.idx, 10);
-      ncStep2Draft[i]._checked = cb.checked;
-      // 체크 해제 시 별도 보정
-      if (!cb.checked && ncStep2Draft[i].isPrimary) {
-        ncStep2Draft[i].isPrimary = false;
-        const next = ncStep2Draft.find(x => x._checked);
-        if (next) next.isPrimary = true;
-      }
-      // 별 자동 부여: 이번 체크가 첫 체크면 기본으로
-      if (cb.checked && !ncStep2Draft.some(x => x.isPrimary)) {
-        ncStep2Draft[i].isPrimary = true;
-      }
-      renderNcCalendarsMulti();
-    });
-  });
-
-  list.querySelectorAll('.cal-star').forEach(star => {
-    star.addEventListener('click', e => {
-      e.stopPropagation();
-      const i = parseInt(star.closest('.cal-select-item').dataset.idx, 10);
-      if (!ncStep2Draft[i]._checked) { toast(t('toast.checkFirst')); return; }
-      ncStep2Draft.forEach(x => x.isPrimary = false);
-      ncStep2Draft[i].isPrimary = true;
-      renderNcCalendarsMulti();
-    });
-  });
-
-  // 🆕 v26.5.9f 주황 별표 — 새 일정의 전체 기본 위치 (3 source 통합 단일).
-  list.querySelectorAll('.cal-default-star').forEach(star => {
-    star.addEventListener('click', async e => {
-      e.stopPropagation();
-      const i = parseInt(star.closest('.cal-select-item').dataset.idx, 10);
-      if (!ncStep2Draft[i]._checked) { toast(t('toast.checkFirst')); return; }
-      const wasDefault = isDefaultTarget('nextcloud', ncStep2Draft[i].url);
-      await setDefaultTarget(wasDefault ? null : 'nextcloud', ncStep2Draft[i].url);
-      renderNcCalendarsMulti();
-    });
-  });
-}
-
-
-// ─── step2의 "완료" 버튼 ───
-document.getElementById('ncSelectDone').addEventListener('click', async () => {
-  const picked = ncStep2Draft.filter(c => c._checked).map(c => ({
-    url: c.url,
-    displayName: calDisplayName(c, 'nextcloud'),  // 🆕 빈 이름 방지
-    isPrimary: c.isPrimary
-  }));
-
-  if (picked.length === 0) { toast(t('toast.selectAtLeastOne')); return; }
-
-  await window.electronAPI.nextcloudSetSelectedCalendars(picked);
-  closeNcModal();
-  toast(t('toast.nextcloudCalendarsSelectedFmt', { n: picked.length }));
-  await refreshNextcloudAuthStatus();
-  setTimeout(() => syncFromNextcloud(), 500);
-});
-
-
-// ╔══════════════════════════════════════════════════════════════════╗
-// ║  ▼ NextCloud 관리 모달 (🆕 이미 연결된 상태에서 캘린더 재선택)         ║
-// ╚══════════════════════════════════════════════════════════════════╝
-
-const ncManageModalBg = document.getElementById('ncManageModalBg');
-let ncManageDraft = [];
-
-async function openNextcloudManageModal() {
-  // 저장된 선택 목록은 항상 읽기 가능
-  const selected = await window.electronAPI.nextcloudGetSelectedCalendars() || [];
-  const selectedUrls = new Set(selected.map(c => c.url));
-  const primaryUrl = (selected.find(c => c.isPrimary) || {}).url;
-
-  let allCals = [];
-  let listError = null;
-  try {
-    const r = await window.electronAPI.nextcloudListCalendars();
-    if (r.ok) {
-      allCals = r.calendars || [];
-    } else {
-      listError = r.error || t('err.unknown');
-    }
-  } catch (err) {
-    listError = err.message || String(err);
-  }
-
-  // 🆕 API 실패 시 저장된 selected만이라도 표시
-  if (allCals.length === 0 && selected.length > 0) {
-    allCals = selected.map(c => ({ url: c.url, displayName: c.displayName }));
-  }
-
-  ncManageDraft = allCals.map(c => {
-    const saved = selected.find(s => s.url === c.url);
-    // 🆕 v26.5.7: 원본색 우선순위 = 서버 응답 > 저장된 originalColor > 폴백
-    //   서버에서 calendar-color 새로 왔으면 그게 진짜 원본
-    //   없으면 이전에 저장해둔 originalColor 사용
-    //   둘 다 없으면 NextCloud 브랜드색 폴백
-    const originalColor = c.color || (saved && saved.originalColor) || '#0082c9';
-    return {
-      url: c.url,
-      displayName: c.displayName,
-      originalColor: originalColor,   // 🆕 ↺ 리셋 시 돌아갈 색
-      customColor: (saved && saved.customColor) || originalColor,
-      _checked: selectedUrls.has(c.url),
-      isPrimary: c.url === primaryUrl
-    };
-  });
-
-  renderNcManageList(listError);
-  ncManageModalBg.classList.add('show');
-}
-
-function closeNcManageModal() {
-  ncManageModalBg.classList.remove('show');
-  ncManageDraft = [];
-}
-
-function renderNcManageList(listError) {
-  const list = document.getElementById('ncManageList');
-
-  let errorBox = '';
-  if (listError) {
-    errorBox = `
-      <div class="cal-select-error">
-        ${t('cal.fetchErrorNcHtml', { msg: escapeHtml(listError) })}
-      </div>
-    `;
-  }
-
-  if (ncManageDraft.length === 0) {
-    list.innerHTML = errorBox + `<div class="cal-select-empty">${t('cal.empty')}</div>`;
-    return;
-  }
-
-  list.innerHTML = errorBox + ncManageDraft.map((c, i) => {
-    const isDefault = isDefaultTarget('nextcloud', c.url);   // 🆕 v26.5.9f
-    return `
-    <div class="cal-select-item" data-idx="${i}">
-      <input type="checkbox" class="cal-check" ${c._checked ? 'checked' : ''}>
-      <input type="color" class="cal-color-input" value="${escapeHtml(c.customColor)}" title="${t('cal.colorChangeTitle')}">
-      <span class="cal-name">${escapeHtml(calDisplayName(c, 'nextcloud'))}</span>
-      <button class="cal-color-reset" title="${t('cal.colorResetTitleNc')}">↺</button>
-      <button class="cal-star ${c.isPrimary ? 'active' : ''}" title="${t('cal.starPrimaryTitle')}">
-        ${c.isPrimary ? '⭐' : '☆'}
-      </button>
-      <button class="cal-default-star ${isDefault ? 'active' : ''}" title="${t('cal.starDefaultTitle')}">
-        ${isDefault ? '★' : '☆'}
-      </button>
-    </div>
-  `;
-  }).join('');
-
-  list.querySelectorAll('.cal-check').forEach(cb => {
-    cb.addEventListener('change', () => {
-      const i = parseInt(cb.closest('.cal-select-item').dataset.idx, 10);
-      ncManageDraft[i]._checked = cb.checked;
-      if (!cb.checked && ncManageDraft[i].isPrimary) {
-        ncManageDraft[i].isPrimary = false;
-        const next = ncManageDraft.find(x => x._checked);
-        if (next) next.isPrimary = true;
-      }
-      renderNcManageList(listError);
-    });
-  });
-
-  // 🆕 색상 picker
-  list.querySelectorAll('.cal-color-input').forEach(inp => {
-    inp.addEventListener('input', () => {
-      const i = parseInt(inp.closest('.cal-select-item').dataset.idx, 10);
-      ncManageDraft[i].customColor = inp.value;
-    });
-  });
-
-  // 🆕 색상 리셋
-  list.querySelectorAll('.cal-color-reset').forEach(btn => {
-    btn.addEventListener('click', e => {
-      e.stopPropagation();
-      const i = parseInt(btn.closest('.cal-select-item').dataset.idx, 10);
-      // 🆕 NextCloud 원본 색으로 복원 (없으면 브랜드색 폴백)
-      ncManageDraft[i].customColor = ncManageDraft[i].originalColor || '#0082c9';
-      renderNcManageList(listError);
-    });
-  });
-
-  list.querySelectorAll('.cal-star').forEach(star => {
-    star.addEventListener('click', e => {
-      e.stopPropagation();
-      const i = parseInt(star.closest('.cal-select-item').dataset.idx, 10);
-      if (!ncManageDraft[i]._checked) { toast(t('toast.checkFirst')); return; }
-      ncManageDraft.forEach(x => x.isPrimary = false);
-      ncManageDraft[i].isPrimary = true;
-      renderNcManageList(listError);
-    });
-  });
-
-  // 🆕 v26.5.9f 주황 별표 — 새 일정의 전체 기본 위치 (3 source 통합 단일).
-  list.querySelectorAll('.cal-default-star').forEach(star => {
-    star.addEventListener('click', async e => {
-      e.stopPropagation();
-      const i = parseInt(star.closest('.cal-select-item').dataset.idx, 10);
-      if (!ncManageDraft[i]._checked) { toast(t('toast.checkFirst')); return; }
-      const wasDefault = isDefaultTarget('nextcloud', ncManageDraft[i].url);
-      await setDefaultTarget(wasDefault ? null : 'nextcloud', ncManageDraft[i].url);
-      renderNcManageList(listError);
-    });
-  });
-}
-
-ncManageModalBg.addEventListener('click', e => {
-  if (e.target.id === 'ncManageModalBg') closeNcManageModal();
-});
-document.getElementById('ncManageCancel').addEventListener('click', closeNcManageModal);
-
-document.getElementById('ncManageSave').addEventListener('click', async () => {
-  const picked = ncManageDraft.filter(c => c._checked).map(c => ({
-    url: c.url,
-    displayName: calDisplayName(c, 'nextcloud'),
-    originalColor: c.originalColor,   // 🆕 다음 모달 열 때 ↺ 복원용
-    customColor: c.customColor,
-    isPrimary: c.isPrimary
-  }));
-
-  // 🆕 선택 셋이 같으면 동기화 스킵 (색상만 바뀐 경우)
-  const oldList = state.nextcloudSelectedCalendars;
-  const sameSelection = picked.length === oldList.length
-    && picked.every(p => oldList.some(o => o.url === p.url && o.isPrimary === p.isPrimary));
-
-  if (picked.length === 0) {
-    if (!confirm(t('confirm.nextcloudNoSelection'))) return;
-  }
-
-  await window.electronAPI.nextcloudSetSelectedCalendars(picked);
-  closeNcManageModal();
-  await refreshNextcloudAuthStatus();
-  toast(t('toast.nextcloudCalendarsSavedFmt', { n: picked.length }));
-
-  renderCalendar();   // 🆕 색상 즉시 반영
-
-  if (!sameSelection) {
-    state.events = state.events.filter(e => e.source !== 'nextcloud');
-    await saveEvents();
-    renderCalendar();
-    setTimeout(() => syncFromNextcloud(), 300);
-  }
-});
-
-document.getElementById('ncManageRevoke').addEventListener('click', async () => {
-  if (!confirm(t('confirm.nextcloudDisconnect'))) return;
-  try {
-    await window.electronAPI.authNextcloudRevoke();
-    state.events = state.events.filter(e => e.source !== 'nextcloud');
-    // 🆕 동기화 범위 초기화
-    state.syncedRange.nextcloud = { start: null, end: null };
-    saveSyncedRange();
-    await saveEvents();
-    closeNcManageModal();
-    renderCalendar();
-    toast(t('toast.nextcloudDisconnected'));
-  } catch (err) {
-    toast(t('toast.disconnectFail', { err: err.message }));
-  } finally {
-    await refreshNextcloudAuthStatus();
-  }
-});
 
 
 // ╔══════════════════════════════════════════════════════════════════╗
@@ -5380,58 +5255,55 @@ document.getElementById('ctxQuit').addEventListener('click', async () => {
 // ║  열려있던 모든 팝업/메뉴를 깔끔히 닫음.                              ║
 // ╚══════════════════════════════════════════════════════════════════╝
 
-// 위젯 외부(또는 캘린더 빈 영역) 클릭 → 모든 팝오버/메뉴 닫기
+// 위젯의 빈 공간 클릭 → 팝오버/컨텍스트 메뉴 닫기.
+// 🆕 v26.0925.1 설정 모달은 여기서 닫지 않는다 — 설정 위에 겹쳐 뜬 모달(카테고리 관리,
+//   NextCloud 연결) 안을 클릭해도 이 핸들러까지 버블링돼 설정이 뒤에서 사라지던 버그.
+//   설정은 ✕ / ⚙ / Esc / 바깥 우클릭으로만 닫힌다.
 document.addEventListener('click', () => {
   hideContextMenu();
-  closeSettingsModal();
   hideDayPopover();
 });
-
-// 단, 설정 패널이나 팝오버 "안쪽" 클릭은 위 핸들러로 전파되지 않게 막음
-// (안 막으면 패널 안 뭐든 클릭하자마자 패널이 닫혀버림)
-document.getElementById('settingsPanel').addEventListener('click', e => e.stopPropagation());
+// 팝오버 "안쪽" 클릭은 위 핸들러로 전파되지 않게 (안 막으면 팝오버 안 뭐든 클릭하자마자 닫힘)
 document.getElementById('dayPopover').addEventListener('click', e => e.stopPropagation());
 
-
-// 창 포커스 잃을 때(다른 앱 클릭 등) → 패널 닫기
-// 단, 모달이 떠있을 땐 닫지 않음 (DevTools 등으로 잠시 포커스 옮겨도 입력 유지)
+// 창 포커스 잃을 때(다른 앱 클릭 등) → 메뉴/팝오버 정리.
+// 🆕 v26.0925.1 모달(설정 포함)이 떠있을 땐 아무것도 안 닫는다 — Google 로그인으로 브라우저가
+//   뜨거나 다른 앱을 잠깐 클릭했다 돌아와도 설정 화면이 그대로 있어야 한다.
 window.addEventListener('blur', () => {
-  const anyModalOpen =
-    document.getElementById('eventModalBg').classList.contains('show') ||
-    document.getElementById('ncModalBg').classList.contains('show') ||
-    document.getElementById('gcalModalBg').classList.contains('show') ||
-    document.getElementById('ncManageModalBg').classList.contains('show') ||
-    document.getElementById('catModalBg').classList.contains('show');   // 🆕 v26.7.22
-  if (anyModalOpen) return;
-
-  closeSettingsModal();
+  if (anyModalOpen()) return;
   hideContextMenu();
   hideDayPopover();
 });
 
-// 어디서든 우클릭 → 일정 모달도 닫음 (혹시 떠있을 때 깔끔하게)
-// 단, 모달 안에서의 우클릭은 무시 (입력칸 우클릭 메뉴 사용 위해)
+// 모달 바깥 우클릭 → 설정/일정 모달 닫기 (일정 모달은 backdrop 좌클릭으로 닫히지 않으므로
+// 이것이 버튼 외의 유일한 닫기 경로 — v26.5.8g 참고). 모달 안에서의 우클릭은 무시
+// (입력칸 우클릭 메뉴 사용 위해).
+// 🆕 v26.0925.1 classList 직접 조작 → closeEventModal(): 예전엔 이 경로로 닫으면 alwaysOnTop
+//   복원과 편집 상태 리셋이 빠져서 다음 모달까지 창이 "항상 위" 가 아닌 채로 남았다.
+// 🆕 v26.0925.1 일정 모달에 작성 중인 내용이 있으면 확인을 묻고, 취소하면 아무것도 안 닫는다.
 document.addEventListener('contextmenu', (e) => {
   if (e.target.closest('.modal')) return;
+  if (!closeEventModalWithConfirm()) return;
   closeSettingsModal();
-  document.getElementById('eventModalBg').classList.remove('show');
   hideDayPopover();
 });
 
-// 창이 숨겨지는 순간(트레이로 들어가는 등)에도 패널 닫기
-// → 다시 보일 때 깔끔한 상태로
-// 단, 모달이 떠있으면 그대로 유지
-document.addEventListener('visibilitychange', () => {
-  if (document.hidden) {
-    const anyModalOpen =
-      document.getElementById('eventModalBg').classList.contains('show') ||
-      document.getElementById('ncModalBg').classList.contains('show') ||
-      document.getElementById('gcalModalBg').classList.contains('show') ||
-      document.getElementById('ncManageModalBg').classList.contains('show') ||
-      document.getElementById('catModalBg').classList.contains('show');   // 🆕 v26.7.22
-    if (anyModalOpen) return;
+// 🆕 v26.0925.1 Esc → 맨 위에 떠있는 모달 하나만 닫기.
+//   (반복 범위 다이얼로그는 Promise 로 답을 기다리는 중이라 자체 "취소" 버튼으로만 닫음)
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  if (isModalOpen('recScopeModalBg')) return;
+  if      (isModalOpen('catModalBg'))    closeCategoryModal();
+  else if (isModalOpen('ncModalBg'))     closeNcModal();
+  else if (isModalOpen('eventModalBg'))  closeEventModalWithConfirm();
+  else if (isModalOpen('settingsPanel')) closeSettingsModal();
+  else { hideContextMenu(); hideDayPopover(); }
+});
 
-    closeSettingsModal();
+// 창이 숨겨지는 순간(트레이로 들어가는 등) → 메뉴/팝오버 정리 (다시 보일 때 깔끔한 상태로).
+// 모달이 떠있으면 그대로 유지.
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && !anyModalOpen()) {
     hideContextMenu();
     hideDayPopover();
   }
@@ -5480,15 +5352,7 @@ if (isElectron) {
   // ?. 는 onWindowHidden 함수가 없으면 안 죽게 하는 안전장치
   // 단, 모달이 떠있으면 그대로 유지
   window.electronAPI.onWindowHidden?.(() => {
-    const anyModalOpen =
-      document.getElementById('eventModalBg').classList.contains('show') ||
-      document.getElementById('ncModalBg').classList.contains('show') ||
-      document.getElementById('gcalModalBg').classList.contains('show') ||
-      document.getElementById('ncManageModalBg').classList.contains('show') ||
-      document.getElementById('catModalBg').classList.contains('show');   // 🆕 v26.7.22
-    if (anyModalOpen) return;
-
-    closeSettingsModal();
+    if (anyModalOpen()) return;
     hideContextMenu();
     hideDayPopover();
   });
@@ -5526,6 +5390,7 @@ if (isElectron) {
   applyTheme();          // 🆕 v26.5.9b 테마(light/dark) → html 클래스 + 토글 active
   applyEventWrap();      // 🆕 v26.7.22 일정 제목 여러 줄 → .widget.event-wrap 클래스
   renderCategorySummary();  // 🆕 v26.7.22 설정 패널의 카테고리 요약 라벨
+  renderAcctCatList();      // 🆕 v26.0925.1 캘린더 탭의 로컬 카테고리 목록
   applyLayout();         // 레이아웃 → 그리드 종류 결정 + renderCalendar 호출
 
   // 3) 메모 렌더링 + 알람 예약

@@ -97,15 +97,15 @@
   <!-- ╔══════════════════════════════════════════════════════════════════╗
        ║  ⑤ 설정 모달                                                       ║
        ║                                                                    ║
-       ║  🆕 v26.0828.1 드롭다운 패널 → 중앙 모달 + 좌측 탭 구조로 개편.       ║
+       ║  🆕 v26.0828.1 드롭다운 패널 → 중앙 모달 + 탭 구조로 개편.            ║
+       ║  🆕 v26.0925.1 탭 4개 → 2개로 단순화:                                ║
+       ║    - 일반   = (구) 일반 + 스킨    : 언어 / 창 동작 / 레이아웃 / 표시   ║
+       ║    - 캘린더 = (구) 카테고리 + 계정연동 : 기본 위치 / 카테고리 / 계정   ║
+       ║    탭이 2개뿐이라 좌측 사이드바 대신 상단 가로 탭으로.                 ║
        ║  ⚙ 톱니바퀴 버튼을 누르면 화면 가운데에 뜨는 모달.                    ║
-       ║  탭: 일반 / 스킨 / 카테고리 / 계정연동                                ║
        ║                                                                    ║
-       ║  ⚠ id="settingsPanel" 은 그대로 유지 — app.js의 기존 .show 토글       ║
-       ║    로직(모달 바깥 클릭/블러 시 닫힘 등)을 안 건드리기 위함.           ║
-       ║    outer div가 곧 modal-bg (배경+중앙정렬), 안쪽 .modal이 실제 박스.  ║
-       ║                                                                    ║
-       ║  ★★★ NextCloud 연동에서 수정한 곳: "계정연동" 탭의 NextCloud 행 ★★★  ║
+       ║  ⚠ id="settingsPanel" 은 그대로 유지 — app.js의 .show 토글 로직과     ║
+       ║    호환. outer div가 곧 modal-bg (배경+중앙정렬), 안쪽 .modal이 박스.  ║
        ╚══════════════════════════════════════════════════════════════════╝ -->
   <div class="modal-bg settings-panel" id="settingsPanel">
    <div class="modal settings-modal">
@@ -115,28 +115,22 @@
       <button class="modal-close-btn" id="settingsCloseBtn" data-i18n-title="settings.close" title="닫기">✕</button>
     </div>
 
-    <div class="settings-modal-body">
-
-     <!-- ── 좌측 탭 목록 ── -->
-     <div class="settings-tabs" id="settingsTabs">
+    <!-- ── 상단 탭 ── -->
+    <div class="settings-tabs" id="settingsTabs">
       <button class="settings-tab active" data-tab="general">
         <span class="settings-tab-icon">⚙</span><span data-i18n="settings.tab.general">일반</span>
       </button>
-      <button class="settings-tab" data-tab="skin">
-        <span class="settings-tab-icon">🎨</span><span data-i18n="settings.tab.skin">스킨</span>
+      <button class="settings-tab" data-tab="calendar">
+        <span class="settings-tab-icon">📅</span><span data-i18n="settings.tab.calendar">캘린더</span>
       </button>
-      <button class="settings-tab" data-tab="category">
-        <span class="settings-tab-icon">🏷</span><span data-i18n="settings.tab.category">카테고리</span>
-      </button>
-      <button class="settings-tab" data-tab="account">
-        <span class="settings-tab-icon">🔄</span><span data-i18n="settings.tab.account">계정연동</span>
-      </button>
-     </div>
+    </div>
 
-     <!-- ── 우측 탭 내용 ── -->
+    <div class="settings-modal-body">
+
+     <!-- ── 탭 내용 ── -->
      <div class="settings-panes">
 
-      <!-- ══════════════════ 일반 ══════════════════ -->
+      <!-- ══════════════════ 일반 (언어 / 창 동작 / 레이아웃 / 표시) ══════════════════ -->
       <div class="settings-pane active" data-pane="general">
 
         <!-- 🆕 v26.0828.1 언어 선택 (다국어 지원 1단계: 한국어/영어) -->
@@ -161,30 +155,10 @@
           <input type="checkbox" id="alwaysAtBottomToggle">
         </div>
 
+        <!-- 🆕 v26.0925.1 "새 일정 기본 위치" 블록은 "캘린더" 탭으로 이동.
+             거기서 카테고리/캘린더 목록 바로 위에 두는 게 ★ 를 누르는 자리와 가깝다. -->
+
         <div class="settings-divider"></div>
-
-        <!-- 🆕 v26.5.9f 새 일정 기본 저장 위치 (3개 source 통합).
-             🆕 v26.0728.1 여기서 직접 지정하는 컨트롤은 제거 — 별표는 각자의 관리 화면에서:
-             - Google/NextCloud: "계정연동" 탭의 캘린더 목록에서 ★
-             - 로컬: "카테고리" 탭의 (분류 없음) 또는 각 카테고리 행의 ★
-             여기서는 지금 어디로 가는지 한 줄 요약만 보여줌. -->
-        <h4 data-i18n="settings.general.defaultTargetHeading">➕ 새 일정 기본 위치</h4>
-        <p class="settings-hint" data-i18n-html="settings.general.defaultTargetHintHtml">
-          일정을 새로 추가할 때 <b>저장 위치가 자동으로 선택</b>되는 곳이에요.
-          Google/NextCloud는 <b>동기화 설정</b> 모달에서, 로컬은 <b>카테고리 관리</b> 모달에서
-          캘린더/카테고리 옆의 <span class="hint-star">☆→★</span> 를 눌러 지정하세요.
-        </p>
-        <div class="settings-row default-target-row">
-          <div class="account-info">
-            <span class="account-name" data-i18n="settings.general.currentDefault">현재 기본 위치</span>
-            <span class="account-email" id="defaultTargetLabel">(미설정 — Google 우선)</span>
-          </div>
-        </div>
-
-      </div><!-- /pane general -->
-
-      <!-- ══════════════════ 스킨 ══════════════════ -->
-      <div class="settings-pane" data-pane="skin">
 
         <!-- ── 레이아웃 카드 3종 (🆕 v26.5.8i 균일 / 주말 압축 / 주간 일정) ── -->
         <h4 data-i18n="settings.skin.layout">📐 레이아웃</h4>
@@ -238,32 +212,54 @@
           <input type="checkbox" id="eventWrapToggle">
         </div>
 
-      </div><!-- /pane skin -->
+      </div><!-- /pane general -->
 
-      <!-- ══════════════════ 카테고리 ══════════════════ -->
-      <div class="settings-pane" data-pane="category">
+      <!-- ══════════════════ 캘린더 (기본 위치 / 카테고리 / Google / NextCloud) ══════════════════ -->
+      <!-- 🆕 v26.0925.1 개편:
+           - (구) 카테고리 탭 + 계정연동 탭을 하나로 합침
+           - "새 일정 기본 위치" 안내를 일반 탭에서 여기로 옮김 (★ 를 누르는 목록 바로 위)
+           - 로컬 카테고리 / Google / NextCloud 캘린더 목록을 모달 없이 여기서 바로 표시
+           - 연결된 계정의 버튼은 "동기화 설정" → "연결 해제" (목록이 여기 있으니 설정 모달 불필요) -->
+      <div class="settings-pane" data-pane="calendar">
 
-        <!-- ── 🆕 v26.7.22 로컬 일정 카테고리 (업무/개인 등) ── -->
-        <h4 data-i18n="settings.category.heading">🏷 카테고리</h4>
-        <div class="settings-row">
+        <!-- ── 동기화 섹션 헤더 (클릭하면 즉시 동기화) ── -->
+        <!-- 🆕 v26.0925.1 제목 클릭(보이지 않는 동작) 대신 "지금 동기화" 버튼 -->
+        <div class="settings-heading-row">
+          <h4 data-i18n="settings.account.syncHeading">🔄 동기화</h4>
+          <button class="account-btn" id="syncNowBtn" data-i18n="settings.account.syncNowBtn" data-i18n-title="settings.account.syncNowTitle" title="연결된 계정 전부 지금 동기화 + 캘린더 목록 새로고침">지금 동기화</button>
+        </div>
+
+        <!-- 🆕 v26.5.9f 새 일정 기본 저장 위치 (3개 source 통합) — ☆→★ 로 지정
+             🆕 v26.0925.1 ⭐/★ 두 별의 뜻을 여기서 같이 설명 (구 캘린더 선택 모달의 범례 복원) -->
+        <p class="settings-hint" data-i18n-html="settings.account.defaultTargetHintHtml">
+          아래 목록에서 별을 눌러 지정하세요.<br>
+          <span class="hint-star">★ 주황 별</span> = 새 일정을 추가할 때 <b>자동으로 선택되는 저장 위치</b> (로컬·Google·NextCloud 통틀어 1곳)<br>
+          <span class="hint-star-primary">⭐ 노란 별</span> = 그 계정 안에서의 <b>대표 캘린더</b> (일정 모달에서 저장 위치를 그 계정으로 바꿀 때 기본 선택)
+        </p>
+        <div class="settings-row default-target-row">
           <div class="account-info">
-            <span class="account-name" data-i18n="settings.category.localLabel">로컬 일정 카테고리</span>
-            <span class="account-email" id="categorySummary">0개</span>
-          </div>
-          <div class="account-controls">
-            <button class="account-btn" id="categoryManageBtn" data-i18n="settings.category.manageBtn">관리</button>
+            <span class="account-name" data-i18n="settings.general.currentDefault">현재 기본 위치</span>
+            <span class="account-email" id="defaultTargetLabel">(미설정 — Google 우선)</span>
           </div>
         </div>
 
-      </div><!-- /pane category -->
+        <div class="settings-divider"></div>
 
-      <!-- ══════════════════ 계정연동 ══════════════════ -->
-      <div class="settings-pane" data-pane="account">
+        <!-- ── 로컬 달력 카테고리 (이름 편집/추가/삭제는 "관리" 모달에서) ── -->
+        <div class="settings-row settings-account">
+          <div class="account-info">
+            <span class="account-name" data-i18n="settings.account.localLabel">🏷 달력 카테고리 (로컬)</span>
+            <span class="account-email" id="acctCatSummary">0개</span>
+          </div>
+          <div class="account-controls">
+            <button class="account-btn" id="acctCatManageBtn" data-i18n="settings.category.manageBtn">관리</button>
+          </div>
+        </div>
+        <div class="acct-cal-list" id="acctCatList"></div>
 
-        <!-- ── 동기화 섹션 헤더 (클릭하면 즉시 동기화) ── -->
-        <h4 id="syncHeader" class="clickable-header" data-i18n="settings.account.syncHeading" data-i18n-title="settings.account.syncHeadingTitle" title="클릭하여 지금 동기화">🔄 동기화</h4>
+        <div class="settings-divider"></div>
 
-        <!-- ── Google 계정 연결 행 ── -->
+        <!-- ── Google 계정 연결 행 + 연동 캘린더 목록 ── -->
         <div class="settings-row settings-account">
           <div class="account-info">
             <span class="account-name" data-i18n="settings.account.googleLabel">Google Calendar / Tasks</span>
@@ -273,9 +269,12 @@
             <button class="account-btn" id="googleAuthBtn" data-i18n="settings.account.connect">연결</button>
           </div>
         </div>
+        <div class="acct-cal-list" id="acctGcalList"></div>
+
+        <div class="settings-divider"></div>
 
         <!-- ╔══════════════════════════════════════════════════════════════╗
-             ║  ★ NextCloud 계정 연결 행                                      ║
+             ║  ★ NextCloud 계정 연결 행 + 연동 캘린더 목록                    ║
              ║  - id="nextcloudStatus": 연결 상태 표시 (사용자명·캘린더명)     ║
              ║  - id="nextcloudAuthBtn": 연결/해제 버튼                       ║
              ╚══════════════════════════════════════════════════════════════╝ -->
@@ -288,8 +287,9 @@
             <button class="account-btn" id="nextcloudAuthBtn" data-i18n="settings.account.connect">연결</button>
           </div>
         </div>
+        <div class="acct-cal-list" id="acctNcList"></div>
 
-      </div><!-- /pane account -->
+      </div><!-- /pane calendar -->
 
      </div><!-- /settings-panes -->
 
@@ -501,16 +501,13 @@
      ║  ⑧ NextCloud 인증 모달 (★ 새로 추가된 부분)                          ║
      ║                                                                      ║
      ║  설정 패널의 NextCloud "연결" 버튼을 누르면 화면 가운데 뜨는 창.       ║
-     ║  2단계로 구성:                                                         ║
-     ║   - Step1 (ncStep1): 서버주소 / ID / 앱비밀번호 입력 → "연결"          ║
-     ║   - Step2 (ncStep2): 로그인 성공 후, 어떤 캘린더를 쓸지 라디오로 선택   ║
-     ║                                                                      ║
-     ║  app.js의 NextCloud 핸들러가 ncStep1 ↔ ncStep2 를 토글함               ║
+     ║  서버주소 / ID / 앱비밀번호 입력 → "연결" 뿐.                          ║
+     ║  🆕 v26.0925.1 인증 후의 캘린더 선택 단계(구 ncStep2)는 삭제 —         ║
+     ║    설정 > 캘린더 탭의 인라인 캘린더 목록이 그 역할을 대신한다.          ║
      ╚════════════════════════════════════════════════════════════════════╝ -->
 <div class="modal-bg" id="ncModalBg">
   <div class="modal">
 
-    <!-- ── Step 1: 서버 정보 입력 ── -->
     <div id="ncStep1">
       <h3 data-i18n="nc.connectTitle">NextCloud 연결</h3>
 
@@ -540,88 +537,12 @@
       </div>
     </div>
 
-    <!-- ── Step 2: 캘린더 선택 (Step1 성공 후 표시, 멀티셀렉) ── -->
-    <div id="ncStep2" style="display:none">
-      <h3 data-i18n="nc.selectCalendarsTitle">동기화할 캘린더 선택</h3>
-      <!-- 🆕 v26.0728.1 별 2종 설명 — ⭐(계정 대표)과 ★(전체 기본 위치)를 혼동하기 쉬워 명시 -->
-      <p class="cal-select-hint" data-i18n-html="cal.selectHintHtml">
-        체크 = 동기화에 포함<br>
-        <b>⭐ 노란 별</b> = 이 계정에서 대표로 쓸 캘린더 (1개)<br>
-        <b>★ 주황 별</b> = 새 일정 추가 시 자동 선택되는 전체 기본 위치 (로컬·Google·NextCloud 통합 1곳)
-      </p>
-
-      <!-- app.js가 체크박스+별 항목 리스트로 채워줌 -->
-      <div id="ncCalendars" class="cal-select-list"></div>
-
-      <div class="modal-actions">
-        <button class="btn btn-secondary" id="ncCancel2" data-i18n="btn.cancel">취소</button>
-        <button class="btn btn-primary" id="ncSelectDone" data-i18n="btn.done">완료</button>
-      </div>
-    </div>
-
   </div>
 </div>
 
-
-<!-- ╔════════════════════════════════════════════════════════════════════╗
-     ║  ⑨ Google 캘린더 선택 모달 (🆕 멀티 캘린더 지원용)                     ║
-     ║                                                                      ║
-     ║  Google 인증 직후 또는 이미 연결된 Google "관리" 클릭 시 뜸.           ║
-     ║  - 가져올 수 있는 캘린더 전체 표시                                     ║
-     ║  - 체크박스로 동기화할 것들 선택                                       ║
-     ║  - ⭐ 별 클릭으로 새 일정의 기본 저장 위치 지정 (1개)                  ║
-     ║  - 좌하단 "연결 해제" 링크 / 우하단 "취소" "저장"                      ║
-     ╚════════════════════════════════════════════════════════════════════╝ -->
-<div class="modal-bg" id="gcalModalBg">
-  <div class="modal">
-    <h3 data-i18n="gcal.title">Google 캘린더 선택</h3>
-    <!-- 🆕 v26.0728.1 별 2종 설명 -->
-    <p class="cal-select-hint" data-i18n-html="cal.selectHintHtml">
-      체크 = 동기화에 포함<br>
-      <b>⭐ 노란 별</b> = 이 계정에서 대표로 쓸 캘린더 (1개)<br>
-      <b>★ 주황 별</b> = 새 일정 추가 시 자동 선택되는 전체 기본 위치 (로컬·Google·NextCloud 통합 1곳)
-    </p>
-
-    <div id="gcalList" class="cal-select-list"></div>
-
-    <div class="modal-actions modal-actions-split">
-      <button class="link-btn link-btn-danger" id="gcalRevoke" data-i18n="btn.disconnect">연결 해제</button>
-      <div class="modal-actions-right">
-        <button class="btn btn-secondary" id="gcalCancel" data-i18n="btn.cancel">취소</button>
-        <button class="btn btn-primary" id="gcalSave" data-i18n="btn.save">저장</button>
-      </div>
-    </div>
-  </div>
-</div>
-
-
-<!-- ╔════════════════════════════════════════════════════════════════════╗
-     ║  ⑩ NextCloud "관리" 모달 (🆕 이미 연결된 상태에서 캘린더 재선택용)     ║
-     ║                                                                      ║
-     ║  ncModalBg 와는 별도. 이미 인증돼있을 때 "연결됨" 버튼 클릭 시 뜸.     ║
-     ║  Google 모달과 동일한 UI 패턴.                                         ║
-     ╚════════════════════════════════════════════════════════════════════╝ -->
-<div class="modal-bg" id="ncManageModalBg">
-  <div class="modal">
-    <h3 data-i18n="ncManage.title">NextCloud 캘린더 선택</h3>
-    <!-- 🆕 v26.0728.1 별 2종 설명 -->
-    <p class="cal-select-hint" data-i18n-html="cal.selectHintHtml">
-      체크 = 동기화에 포함<br>
-      <b>⭐ 노란 별</b> = 이 계정에서 대표로 쓸 캘린더 (1개)<br>
-      <b>★ 주황 별</b> = 새 일정 추가 시 자동 선택되는 전체 기본 위치 (로컬·Google·NextCloud 통합 1곳)
-    </p>
-
-    <div id="ncManageList" class="cal-select-list"></div>
-
-    <div class="modal-actions modal-actions-split">
-      <button class="link-btn link-btn-danger" id="ncManageRevoke" data-i18n="btn.disconnect">연결 해제</button>
-      <div class="modal-actions-right">
-        <button class="btn btn-secondary" id="ncManageCancel" data-i18n="btn.cancel">취소</button>
-        <button class="btn btn-primary" id="ncManageSave" data-i18n="btn.save">저장</button>
-      </div>
-    </div>
-  </div>
-</div>
+<!-- 🆕 v26.0925.1 구 ⑨ Google 캘린더 선택 모달 / ⑩ NextCloud 관리 모달은 삭제.
+     두 모달이 하던 일(캘린더 체크·색상·⭐·★·연결 해제)은 전부
+     설정 > 캘린더 탭의 인라인 목록(#acctGcalList / #acctNcList)으로 옮겨졌다. -->
 
 
 <!-- ╔════════════════════════════════════════════════════════════════════╗

@@ -50,11 +50,16 @@ jobs:
           path: dist/*.exe
           retention-days: 30
 
+      # 🆕 v26.925.2 자동 업데이트용 메타데이터(latest.yml)와 차분 다운로드용 blockmap 도 같이 올림.
+      #   electron-updater 가 Release 의 latest.yml 을 읽어 새 버전 여부를 판단한다.
       - name: GitHub Release 생성 (태그 push 시만)
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/*.exe
+          files: |
+            dist/*.exe
+            dist/*.blockmap
+            dist/latest.yml
           draft: false
           prerelease: false
         env:

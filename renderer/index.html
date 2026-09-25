@@ -212,6 +212,23 @@
           <input type="checkbox" id="eventWrapToggle">
         </div>
 
+        <div class="settings-divider"></div>
+
+        <!-- ── 🆕 v26.925.2 정보 / 자동 업데이트 ──
+             버튼 하나가 상태에 따라 "업데이트 확인" → "다운로드 페이지" / "지금 재시작" 으로 바뀜.
+             상태 문구는 app.js renderUpdateStatus() 가 채움 (비어 있으면 숨김). -->
+        <h4 data-i18n="settings.info.heading">ℹ 정보</h4>
+        <div class="settings-row settings-account">
+          <div class="account-info">
+            <span class="account-name" data-i18n="settings.info.versionLabel">현재 버전</span>
+            <span class="account-email" id="infoVersion">—</span>
+          </div>
+          <div class="account-controls">
+            <button class="account-btn" id="updateActionBtn" data-i18n="settings.info.checkUpdate">업데이트 확인</button>
+          </div>
+        </div>
+        <p class="settings-hint update-status" id="updateStatus" hidden></p>
+
       </div><!-- /pane general -->
 
       <!-- ══════════════════ 캘린더 (기본 위치 / 카테고리 / Google / NextCloud) ══════════════════ -->

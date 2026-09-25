@@ -24,11 +24,18 @@ There is no test runner, linter, or formatter configured — don't fabricate one
 ### Releases
 Pushing a `v*` tag triggers `.github/workflows/build-{mac,win}.yml`, which builds and attaches artifacts to a GitHub Release automatically. `package.json` `version` must be bumped first, and commit message + tag must use the same version.
 
-**Versioning is date-based (as of v26.0728.1): `vYY.MMDD.N` from the release date** — the first release on 2026-07-28 is `v26.0728.1` (year = last 2 digits, `MMDD` zero-padded to 4 digits, `N` = running sequence number for that day, starting at 1). A *second* release on the same day is `v26.0728.2`, then `v26.0728.3`, … The first release of the next day resets `N` to 1 against the new date (`v26.0729.1`). Never carry the previous day's date or sequence forward — always re-derive from today's date. (v26.7.22 through v26.7.28-ish used a prior `vYY.M.D[letter]` scheme, and versions before v26.6.7 used an unrelated sequential scheme; don't extrapolate from either.)
+**Versioning is date-based: `vYY.MDD.N` from the release date (as of v26.925.2)** — year = last 2 digits, `M` = month *without* zero padding, `DD` = day zero-padded to 2 digits, `N` = running sequence number for that day starting at 1. 2026-09-25 → `v26.925.1`, second release that day → `v26.925.2`; 2026-10-05 → `v26.1005.1`; 2027-01-05 → `v27.105.1`. The first release of a new day resets `N` to 1 against the new date. Never carry the previous day's date or sequence forward — always re-derive from today's date.
 
-- `package.json` version drops the leading `v` (`"26.0728.1"`). The `MMDD` segment's leading zero (e.g. `0728`) is not strictly valid semver (numeric identifiers must not have leading zeros) — prior non-strict forms (`26.5.28d`, `26.7.22a`) worked fine with electron-builder, but if a build ever fails on version parsing, this is the first thing to check.
-- Commit message convention: `vYY.MMDD.N <korean summary>` (see `git log`).
-- In-code `// 🆕 vYY.MMDD.N` markers use the version the change actually ships in — don't renumber them later, and don't add a version to markers for work that hasn't shipped yet.
+- **Why the month is not zero-padded:** the auto-updater (`electron-updater`) parses versions with strict semver, and a numeric identifier with a leading zero (`0925`) is *not* valid semver — the updater would throw "App version is not a valid semver version" and never update. `YY.MDD` stays valid and monotonic within a year (`M*100+DD`), and across years because `YY` increments. (v26.0728.1 – v26.0925.1 used a zero-padded `MMDD`; electron-builder normalized those to `26.925.1` etc. in artifact names. v26.7.22 – v26.7.28-ish used `vYY.M.D[letter]`, and versions before v26.6.7 used an unrelated sequential scheme; don't extrapolate from any of those.)
+- `package.json` version drops the leading `v` (`"26.925.2"`).
+- Commit message convention: `vYY.MDD.N <korean summary>` (see `git log`).
+- In-code `// 🆕 vYY.MDD.N` markers use the version the change actually ships in — don't renumber them later, and don't add a version to markers for work that hasn't shipped yet.
+
+### Auto-update (v26.925.2)
+`updater.js` (main process) wraps `electron-updater` with the GitHub provider (`build.publish` in `package.json`). It checks 30 s after boot and every 6 h, and can be triggered from the tray menu or 설정 > 일반 > 정보. Windows NSIS installs download in the background and prompt "지금 재시작 / 나중에" (`autoInstallOnAppQuit` covers "나중에"); the Windows portable build and macOS (unsigned, so Squirrel refuses in-place installs) only get a notification + link to the releases page. Nothing runs in dev (`!app.isPackaged`). Two things the release pipeline must keep true or updates silently stop:
+- The workflows upload `dist/latest.yml` (+ `*.blockmap`) and `dist/latest-mac.yml` next to the installers. Keep `build.publish` set (it is what makes electron-builder emit those files even with `--publish never`).
+- Artifact names contain no spaces (`neisme-Calendar-Setup-<ver>.exe`): GitHub rewrites spaces to dots on upload while electron-updater rewrites them to dashes, so a name with spaces 404s.
+Before `quitAndInstall`, `updater.js` calls back into `main.js` to set `isQuitting = true`, otherwise the window's close handler hides to tray and cancels the install.
 
 ## Architecture
 

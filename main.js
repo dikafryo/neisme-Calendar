@@ -10,6 +10,7 @@ if (process.env.PORTABLE_EXECUTABLE_DIR) {
 }
 const googleAuth = require('./sync/google-auth');
 const nextcloudAuth = require('./sync/nextcloud-auth');
+const updater = require('./updater');   // 🆕 v26.925.2 GitHub Releases 자동 업데이트
 
 
 const store = new Store({
@@ -384,6 +385,22 @@ function createTray() {
         }
       },
       { type: 'separator' },
+      // 🆕 v26.925.2 업데이트 — 내려받기가 끝났으면 "설치하고 재시작", 아니면 "업데이트 확인"
+      ...(() => {
+        const u = updater.getState();
+        if (u.status === 'ready') {
+          return [{ label: `🔼 v${u.version} 설치하고 재시작`, click: () => updater.installNow() }];
+        }
+        if (u.status === 'available') {
+          return [{ label: `🔼 새 버전 v${u.version} 다운로드 페이지`, click: () => shell.openExternal(u.releasesUrl) }];
+        }
+        return [{
+          label: u.status === 'downloading' ? `업데이트 내려받는 중… ${u.percent}%` : '업데이트 확인',
+          enabled: u.status !== 'checking' && u.status !== 'downloading' && u.status !== 'dev',
+          click: () => updater.checkForUpdates({ manual: true, dialogs: true })
+        }];
+      })(),
+      { type: 'separator' },
       {
         label: '종료',
         click: () => {
@@ -537,6 +554,11 @@ function setupIPC() {
   });
 
   ipcMain.handle('get-app-version', () => app.getVersion());
+
+  // ── 🆕 v26.925.2 자동 업데이트 (설정 > 일반 > 정보) ──
+  ipcMain.handle('get-update-status', () => updater.getState());
+  ipcMain.handle('check-for-updates', () => updater.checkForUpdates({ manual: true }));
+  ipcMain.handle('install-update', () => updater.installNow());
   ipcMain.handle('open-external', (e, url) => shell.openExternal(url));
 
   // ── Google 인증 ─────────────────────────────
@@ -747,6 +769,16 @@ app.whenReady().then(() => {
   setupIPC();
   createWindow();
   createTray();
+
+  // 🆕 v26.925.2 자동 업데이트 — 시작 30초 뒤 첫 확인, 이후 6시간마다
+  updater.init({
+    getMainWindow: () => mainWindow,
+    onBeforeInstall: () => { isQuitting = true; },
+    onStateChange: (u) => {
+      refreshTrayMenu();
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('update-status', u);
+    }
+  });
 
   // 🆕 F12 / Ctrl+Shift+I 로 개발자 도구 열기
   globalShortcut.register('F12', () => {

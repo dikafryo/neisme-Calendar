@@ -73,6 +73,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // ── 앱 정보 ──────────────────────────
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),
+
+  // ── 🆕 v26.925.2 자동 업데이트 (설정 > 일반 > 정보) ──
+  getUpdateStatus: () => ipcRenderer.invoke('get-update-status'),
+  checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
+  installUpdate: () => ipcRenderer.invoke('install-update'),
+  onUpdateStatus: (callback) => {
+    const handler = (_e, status) => callback(status);
+    ipcRenderer.on('update-status', handler);
+    return () => ipcRenderer.removeListener('update-status', handler);
+  },
   
   // ── 외부 링크 ────────────────────────
   openExternal: (url) => ipcRenderer.invoke('open-external', url),

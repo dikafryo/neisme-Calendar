@@ -4296,8 +4296,61 @@ document.getElementById('languageSelect').addEventListener('change', async (e) =
   renderCategorySummary();
   renderDefaultTargetLabel();
   renderAcctCatList();          // 🆕 v26.0925.1
+  renderUpdateStatus();         // 🆕 v26.925.2
   await refreshGoogleAuthStatus();      // 인라인 캘린더 목록도 같이 다시 그려짐
   await refreshNextcloudAuthStatus();
+});
+
+
+// ╔══════════════════════════════════════════════════════════════════╗
+// ║  ▼ 🆕 v26.925.2 자동 업데이트 (설정 > 일반 > 정보)                  ║
+// ║                                                                  ║
+// ║  실제 확인/다운로드/설치는 메인의 updater.js 가 하고, 여기서는       ║
+// ║  상태 스냅샷을 받아 버전 줄 + 상태 문구 + 버튼 라벨/동작만 바꾼다.    ║
+// ║  status: dev | idle | checking | latest | available | downloading  ║
+// ║          | ready | error                                          ║
+// ╚══════════════════════════════════════════════════════════════════╝
+
+let updateState = null;   // 메인이 보내준 마지막 스냅샷
+
+function renderUpdateStatus() {
+  const u = updateState;
+  const ver = document.getElementById('infoVersion');
+  const msg = document.getElementById('updateStatus');
+  const btn = document.getElementById('updateActionBtn');
+  if (!ver || !msg || !btn) return;
+
+  if (u && u.currentVersion) ver.textContent = 'v' + u.currentVersion;
+
+  let text = '', label = t('settings.info.checkUpdate'), disabled = false;
+  switch (u && u.status) {
+    case 'dev':         text = t('update.dev'); disabled = true; break;
+    case 'checking':    text = t('update.checking'); disabled = true; break;
+    case 'latest':      text = t('update.latest'); break;
+    case 'available':   text = t('update.availableFmt', { v: u.version }); label = t('settings.info.openDownload'); break;
+    case 'downloading': text = t('update.downloadingFmt', { v: u.version, p: u.percent || 0 }); disabled = true; break;
+    case 'ready':       text = t('update.readyFmt', { v: u.version }); label = t('settings.info.restartNow'); break;
+    case 'error':       text = t('update.errorFmt', { err: u.error || '' }); break;
+    default:            text = '';
+  }
+  msg.textContent = text;
+  msg.hidden = !text;
+  btn.textContent = label;
+  btn.disabled = disabled || !isElectron;
+}
+
+// 버튼 하나가 상태에 따라 다른 일을 한다: 확인 → 다운로드 페이지 열기 → 지금 재시작
+document.getElementById('updateActionBtn').addEventListener('click', async () => {
+  if (!isElectron) { toast(t('toast.electronOnly')); return; }
+  const st = updateState && updateState.status;
+  if (st === 'ready') {
+    await window.electronAPI.installUpdate();
+  } else if (st === 'available') {
+    window.electronAPI.openExternal(updateState.releasesUrl);
+  } else {
+    updateState = await window.electronAPI.checkForUpdates();
+    renderUpdateStatus();
+  }
 });
 
 
@@ -5342,6 +5395,14 @@ if (isElectron) {
     if (status.message) toast(status.message);
   });
 
+  // 🆕 v26.925.2 업데이트 상태 — 설정 화면 갱신 + 내려받기가 끝나면 토스트 한 번
+  window.electronAPI.onUpdateStatus?.((u) => {
+    const becameReady = u.status === 'ready' && !(updateState && updateState.status === 'ready');
+    updateState = u;
+    renderUpdateStatus();
+    if (becameReady) toast(t('toast.updateReadyFmt', { v: u.version }), 5000);
+  });
+
   // 🆕 v26.0728.1 스티커 메모 창에서 메모를 편집/삭제하면 메인 위젯도 다시 그림
   window.electronAPI.onMemoStoreChanged?.(async () => {
     state.memos = (await loadJSON('cal_memos_v4')) || [];
@@ -5397,13 +5458,16 @@ if (isElectron) {
   renderMemos();
   scheduleAlarms();
 
-  // 4) 버전 표시 (Electron이면)
+  // 4) 버전 표시 (Electron이면) + 🆕 v26.925.2 설정 > 정보의 업데이트 상태 초기값
   if (isElectron) {
     try {
       const v = await window.electronAPI.getAppVersion();
       document.getElementById('versionLabel').textContent = `v${v}`;
+      document.getElementById('infoVersion').textContent = `v${v}`;
+      updateState = await window.electronAPI.getUpdateStatus?.();
     } catch {}
   }
+  renderUpdateStatus();
 
   // 5) 브라우저 모드면 알림 권한 요청
   // (Electron에서는 OS 알림이라 이거 필요없음)

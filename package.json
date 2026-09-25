@@ -1,6 +1,6 @@
 {
   "name": "neisme-calendar",
-  "version": "26.0925.1",
+  "version": "26.925.2",
   "description": "neisme Calendar - 바탕화면 반투명 캘린더 위젯 (Google Calendar / Tasks 연동)",
   "main": "main.js",
   "author": "디카프료 (neis.me)",
@@ -21,6 +21,7 @@
     "@googleapis/oauth2": "^3.0.1",
     "@googleapis/tasks": "^4.3.0",
     "electron-store": "^8.2.0",
+    "electron-updater": "^6.8.9",
     "google-auth-library": "^9.15.1",
     "ical.js": "^2.1.0",
     "tsdav": "^2.1.5"
@@ -31,9 +32,14 @@
   },
   "build": {
     "appId": "me.neis.calendar",
-    "publish": null,
+    "publish": {
+      "provider": "github",
+      "owner": "dikafryo",
+      "repo": "neisme-Calendar",
+      "releaseType": "release"
+    },
     "productName": "neisme Calendar",
-    "artifactName": "${productName} Setup ${version}.${ext}",
+    "artifactName": "neisme-Calendar-Setup-${version}.${ext}",
     "compression": "maximum",
     "files": [
       "main.js",
@@ -68,7 +74,7 @@
       "signtoolOptions": null
     },
     "portable": {
-      "artifactName": "${productName} Portable ${version}.${ext}"
+      "artifactName": "neisme-Calendar-Portable-${version}.${ext}"
     },
     "nsis": {
       "oneClick": false,
@@ -93,6 +99,7 @@
         }
       ],
       "icon": "assets/icon.icns",
+      "artifactName": "neisme-Calendar-${version}-${arch}.${ext}",
       "category": "public.app-category.productivity",
       "hardenedRuntime": true,
       "gatekeeperAssess": false,

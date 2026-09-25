@@ -1067,6 +1067,9 @@ body {
   margin-bottom: 10px;
 }
 .settings-heading-row h4 { margin: 0; }
+/* 🆕 v26.925.2 설정 > 일반 > 정보의 업데이트 상태 문구 — 여백만 조정 */
+.settings-hint.update-status { margin-top: -2px; }
+.settings-hint.update-status[hidden] { display: none; }
 .settings-hint .hint-star-primary {
   color: #f4b400;
   font-weight: 700;

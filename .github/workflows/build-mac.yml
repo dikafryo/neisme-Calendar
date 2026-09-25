@@ -62,6 +62,7 @@ jobs:
           files: |
             dist/*.dmg
             dist/*.zip
+            dist/latest-mac.yml
           draft: false
           prerelease: false
         env:

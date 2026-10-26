@@ -17,7 +17,7 @@ npm run build:mac-arm    # Apple Silicon only
 npm run build:mac-intel  # Intel only
 ```
 
-There is no test runner, linter, or formatter configured — don't fabricate one.
+Unit tests: `npm test` (`node --test tests/`, pure logic in `renderer/sync-range.js`). No linter/formatter configured.
 
 `google-config.json` (OAuth client_id/client_secret) is required for Google features and is gitignored. CI restores it from `secrets.GOOGLE_CONFIG_JSON` or falls back to a dummy. Node 22+.
 

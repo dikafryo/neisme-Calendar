@@ -14,8 +14,8 @@ const syncStore = new Store({
 });
 
 const PROD_ID = '-//neisme//Calendar//KR';
-const PAST_DAYS = 7;
-const FUTURE_DAYS = 56;
+// 🆕 기본 범위(과거/미래 일수)는 sync-settings.js (설정 화면) 값을 사용 (기본 7 / 56일).
+const syncSettings = require('./sync-settings');
 
 const pad2 = n => String(n).padStart(2, '0');
 function formatDate(d) { return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`; }
@@ -475,9 +475,7 @@ async function fetchOneInRange(client, allDavCalendars, calendarUrl) {
     return { calendar: null, objects: [] };
   }
 
-  const now = new Date();
-  const start = new Date(now); start.setDate(now.getDate() - PAST_DAYS); start.setHours(0,0,0,0);
-  const end   = new Date(now); end.setDate(now.getDate() + FUTURE_DAYS); end.setHours(23,59,59,999);
+  const { start, end } = syncSettings.baseWindow(new Date());
 
   const objects = await client.fetchCalendarObjects({
     calendar: target,
@@ -576,24 +574,35 @@ async function incrementalSync() {
 
   const selected = ncAuth.getSelectedCalendars();
   if (selected.length === 0) {
-    return { events: [], deletedIds: [], isFull: true };
+    return { events: [], deletedIds: [], isFull: true, selectedCalendarIds: [], selectedCalendarUrls: [], fullCalendarIds: [], fullCalendarUrls: [] };
   }
 
   // DAV 캘린더 목록을 한 번만 fetch (각 syncOne에서 재사용)
   const allDavCalendars = await client.fetchCalendars();
 
+  // 🆕 범위 설정이 바뀌었으면 모든 etagMap 무효화 → 새 범위로 전체 동기화
+  //   (안 하면 범위를 줄였을 때 옛 범위 일정이 "삭제됨"으로 오판됨)
+  const sig = syncSettings.signature();
+  if (syncStore.get('rangeSig') !== sig) {
+    Object.keys(syncStore.store).filter(k => k.startsWith('etagMap_')).forEach(k => syncStore.delete(k));
+    syncStore.set('rangeSig', sig);
+  }
+
   const allEvents = [];
   const allDeleted = [];
+  const fullCalendarUrls = [];     // 🆕
+  const failedCalendarUrls = [];   // 🆕
   let anyFull = false;
 
   for (const cal of selected) {
     try {
       const r = await syncOne(client, allDavCalendars, cal.url);
-      if (r.isFull) anyFull = true;
+      if (r.isFull) { anyFull = true; fullCalendarUrls.push(cal.url); }
       allEvents.push(...r.events);
       allDeleted.push(...r.deletedIds);
     } catch (err) {
       console.error(`[nc-cal] ${cal.displayName} 동기화 실패:`, err.message);
+      failedCalendarUrls.push(cal.url);
     }
   }
 
@@ -608,7 +617,13 @@ async function incrementalSync() {
   });
 
   syncStore.set('lastSyncAt', new Date().toISOString());
-  return { events: allEvents, deletedIds: allDeleted, isFull: anyFull };
+  const win = syncSettings.baseWindow(new Date());
+  return {
+    events: allEvents, deletedIds: allDeleted, isFull: anyFull,
+    fullCalendarUrls, failedCalendarUrls,
+    selectedCalendarUrls: selected.map(c => c.url),
+    rangeStartISO: win.start.toISOString(), rangeEndISO: win.end.toISOString()
+  };
 }
 
 // ─────────────────────────────────────────────
@@ -738,14 +753,15 @@ async function fetchRange(startISO, endISO) {
   if (!client) throw new Error('NextCloud에 로그인되어 있지 않습니다');
 
   const selected = ncAuth.getSelectedCalendars();
-  if (selected.length === 0) return { events: [] };
+  if (selected.length === 0) return { events: [], failedCalendarUrls: [] };
 
   const allDavCalendars = await client.fetchCalendars();
   const allEvents = [];
+  const failedCalendarUrls = [];   // 🆕 재조정에서 삭제 판단 제외용
 
   for (const cal of selected) {
     const target = allDavCalendars.find(c => c.url === cal.url);
-    if (!target) continue;
+    if (!target) { failedCalendarUrls.push(cal.url); continue; }
 
     try {
       const objects = await client.fetchCalendarObjects({
@@ -758,10 +774,11 @@ async function fetchRange(startISO, endISO) {
       });
     } catch (err) {
       console.error(`[nc-cal] fetchRange ${cal.displayName} 실패:`, err.message);
+      failedCalendarUrls.push(cal.url);
     }
   }
 
-  return { events: allEvents };
+  return { events: allEvents, failedCalendarUrls };
 }
 
 module.exports = {

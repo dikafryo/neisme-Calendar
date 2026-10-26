@@ -14,7 +14,8 @@
     "build:mac-arm": "electron-builder --mac --arm64",
     "build:mac-intel": "electron-builder --mac --x64",
     "build:mac-universal": "electron-builder --mac --universal",
-    "postinstall": "electron-builder install-app-deps"
+    "postinstall": "electron-builder install-app-deps",
+    "test": "node --test tests/"
   },
   "dependencies": {
     "@googleapis/calendar": "^9.8.0",

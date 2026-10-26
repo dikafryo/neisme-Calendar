@@ -9,6 +9,7 @@
 const { calendar } = require('@googleapis/calendar');
 const Store = require('electron-store');
 const googleAuth = require('./google-auth');
+const syncSettings = require('./sync-settings');   // 🆕 동기화 범위 설정 (설정 화면)
 
 const syncStore = new Store({
   name: 'google-calendar-sync',
@@ -16,8 +17,8 @@ const syncStore = new Store({
 });
 
 const TIMEZONE = 'Asia/Seoul';
-const PAST_DAYS = 7;
-const FUTURE_DAYS = 56;
+// 🆕 기본 범위(과거/미래 일수)는 sync-settings.js (설정 화면) 값을 사용.
+//   기본값 과거 7일 / 미래 56일. 렌더러도 같은 값으로 기본 윈도우를 계산함.
 
 // ─────────────────────────────────────────────
 // 데이터 변환: Google ↔ Local (calendarId 추가)
@@ -132,9 +133,7 @@ async function getCalendar() {
 // ─────────────────────────────────────────────
 async function fullSyncOne(calendarId) {
   const calendar = await getCalendar();
-  const now = new Date();
-  const rangeStart = new Date(now); rangeStart.setDate(now.getDate() - PAST_DAYS); rangeStart.setHours(0,0,0,0);
-  const rangeEnd   = new Date(now); rangeEnd.setDate(now.getDate() + FUTURE_DAYS); rangeEnd.setHours(23,59,59,999);
+  const { start: rangeStart, end: rangeEnd } = syncSettings.baseWindow(new Date());
 
   const allItems = [];
   let pageToken, nextSyncToken;
@@ -210,11 +209,20 @@ async function incrementalSyncOne(calendarId) {
 async function incrementalSync() {
   const selected = googleAuth.getSelectedCalendars();
   if (selected.length === 0) {
-    return { events: [], deletedIds: [], isFull: true };
+    return { events: [], deletedIds: [], isFull: true, selectedCalendarIds: [], selectedCalendarUrls: [], fullCalendarIds: [], fullCalendarUrls: [] };
+  }
+
+  // 🆕 범위 설정이 바뀌었으면 모든 syncToken 무효화 → 새 범위로 fullSync
+  const sig = syncSettings.signature();
+  if (syncStore.get('rangeSig') !== sig) {
+    Object.keys(syncStore.store).filter(k => k.startsWith('syncToken_')).forEach(k => syncStore.delete(k));
+    syncStore.set('rangeSig', sig);
   }
 
   const allEvents = [];
   const allDeleted = [];
+  const fullCalendarIds = [];     // 🆕 이번에 fullSync 된 캘린더 (렌더러가 그 캘린더의 윈도우 안만 교체)
+  const failedCalendarIds = [];   // 🆕 실패한 캘린더 (렌더러가 그 캘린더 일정은 건드리지 않음)
   let isFull = false;
 
   // 직렬 처리 (병렬도 가능하지만 API 쿼터 보호 차원에서 직렬이 안전)
@@ -223,11 +231,12 @@ async function incrementalSync() {
       const tokenKey = `syncToken_${cal.id}`;
       const wasFull = !syncStore.get(tokenKey);
       const r = await incrementalSyncOne(cal.id);
-      if (wasFull) isFull = true;
+      if (wasFull) { isFull = true; fullCalendarIds.push(cal.id); }
       allEvents.push(...r.events);
       allDeleted.push(...r.deletedIds);
     } catch (err) {
       console.error(`[google-cal] ${cal.id} 동기화 실패:`, err.message);
+      failedCalendarIds.push(cal.id);
       // 한 캘린더 실패해도 나머지는 계속
     }
   }
@@ -246,7 +255,13 @@ async function incrementalSync() {
 
   syncStore.set('lastSyncAt', new Date().toISOString());
 
-  return { events: allEvents, deletedIds: allDeleted, isFull };
+  const win = syncSettings.baseWindow(new Date());
+  return {
+    events: allEvents, deletedIds: allDeleted, isFull,
+    fullCalendarIds, failedCalendarIds,
+    selectedCalendarIds: selected.map(c => c.id),
+    rangeStartISO: win.start.toISOString(), rangeEndISO: win.end.toISOString()
+  };
 }
 
 // ─────────────────────────────────────────────
@@ -300,7 +315,8 @@ function clearSyncState() {
 // ─────────────────────────────────────────────
 // 🆕 임의 날짜 범위 fetch (syncToken 무시, 그냥 가져오기만)
 //   - 사용자가 보이는 그리드를 동기화 범위 밖으로 옮길 때 호출됨
-//   - 단순 fetch이므로 deletedIds는 못 알아냄 (그래서 호출자가 적절히 처리)
+//   - 단순 fetch이므로 deletedIds는 없음 → 렌더러가 해당 기간 로컬 일정을
+//     이 결과로 교체(diff)해서 추가·수정·삭제를 반영 (실패 캘린더는 제외)
 //
 // @param {string} startISO  "2026-01-01T00:00:00.000Z" 형태
 // @param {string} endISO    동일 형태
@@ -308,10 +324,11 @@ function clearSyncState() {
 // ─────────────────────────────────────────────
 async function fetchRange(startISO, endISO) {
   const selected = googleAuth.getSelectedCalendars();
-  if (selected.length === 0) return { events: [] };
+  if (selected.length === 0) return { events: [], failedCalendarIds: [] };
 
   const calendar = await getCalendar();
   const allEvents = [];
+  const failedCalendarIds = [];   // 🆕 실패 캘린더 → 렌더러 재조정에서 삭제 판단 제외
 
   for (const cal of selected) {
     let pageToken;
@@ -334,10 +351,11 @@ async function fetchRange(startISO, endISO) {
       } while (pageToken);
     } catch (err) {
       console.error(`[google-cal] fetchRange ${cal.id} 실패:`, err.message);
+      failedCalendarIds.push(cal.id);
     }
   }
 
-  return { events: allEvents };
+  return { events: allEvents, failedCalendarIds };
 }
 
 module.exports = {

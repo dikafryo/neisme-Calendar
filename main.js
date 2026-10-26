@@ -724,6 +724,22 @@ function setupIPC() {
     return { ok: true };
   });
 
+  // ── 🆕 동기화 범위 설정 (과거/미래 일수, 범위 밖 캐시 보존 일수) ────
+  ipcMain.handle('get-sync-range-settings', () => require('./sync/sync-settings').get());
+  ipcMain.handle('set-sync-range-settings', (e, partial) => {
+    const ss = require('./sync/sync-settings');
+    const before = ss.signature();
+    const next = ss.set(partial);
+    const rangeChanged = before !== ss.signature();
+    // 범위가 바뀌면 syncToken / etagMap 무효화 → 다음 동기화가 새 범위로 fullSync
+    // (각 모듈도 rangeSig 로 한 번 더 확인하지만 여기서 즉시 비워 정합성 보장)
+    if (rangeChanged) {
+      try { require('./sync/google-calendar').clearSyncState(); } catch {}
+      try { require('./sync/nextcloud-calendar').clearSyncState(); } catch {}
+    }
+    return { ...next, rangeChanged };
+  });
+
   // ── 🆕 임의 범위 동기화 (구글/NextCloud 캘린더 이동 시 자동 호출) ────
   ipcMain.handle('fetch-google-range', async (e, { startISO, endISO }) => {
     try {

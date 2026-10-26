@@ -46,15 +46,7 @@ jobs:
           EP_PRE_RELEASE: false
         run: npx electron-builder --mac --universal --publish never
 
-      - name: .dmg 업로드
-        uses: actions/upload-artifact@v4
-        with:
-          name: neisme-calendar-mac
-          path: |
-            dist/*.dmg
-            dist/*.zip
-          retention-days: 30
-
+      # 아티팩트 업로드 없음 — 배포는 아래 Release 첨부만 사용 (Actions 스토리지 절약)
       - name: GitHub Release 생성 (태그 push 시만)
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2

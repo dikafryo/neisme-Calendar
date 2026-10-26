@@ -43,13 +43,7 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: false
         run: npx electron-builder --win --x64 --publish never
 
-      - name: .exe 업로드
-        uses: actions/upload-artifact@v4
-        with:
-          name: neisme-calendar-win
-          path: dist/*.exe
-          retention-days: 30
-
+      # 아티팩트 업로드 없음 — 배포는 아래 Release 첨부만 사용 (Actions 스토리지 절약)
       # 🆕 v26.925.2 자동 업데이트용 메타데이터(latest.yml)와 차분 다운로드용 blockmap 도 같이 올림.
       #   electron-updater 가 Release 의 latest.yml 을 읽어 새 버전 여부를 판단한다.
       - name: GitHub Release 생성 (태그 push 시만)

@@ -60,6 +60,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // 🆕 달력 이동 시 자동 범위 동기화
   fetchGoogleRange: ({ startISO, endISO }) => ipcRenderer.invoke('fetch-google-range', { startISO, endISO }),
+  // 🆕 동기화 범위 설정
+  getSyncRangeSettings: () => ipcRenderer.invoke('get-sync-range-settings'),
+  setSyncRangeSettings: (partial) => ipcRenderer.invoke('set-sync-range-settings', partial),
   fetchNextcloudRange: ({ startISO, endISO }) => ipcRenderer.invoke('fetch-nextcloud-range', { startISO, endISO }),
 
   // ── 🆕 v26.0728.1 스티커 메모 (독립 데스크탑 창) ──

@@ -101,7 +101,13 @@ const state = {
   syncedRange: {
     google: { start: null, end: null },
     nextcloud: { start: null, end: null }
-  }
+  },
+
+  // 🆕 동기화 범위 설정 (메인 프로세스 sync-settings 와 같은 값)
+  //   pastDays/futureDays: 기본 윈도우, cacheRetentionDays: 범위 밖 캐시 보존(0=지우지 않음)
+  syncRangeSettings: { pastDays: 7, futureDays: 56, cacheRetentionDays: 30 },
+  // 🆕 범위 밖에서 마지막으로 본 기간 기록 [{start(ms), end(ms), lastSeen(ms)}]
+  viewedRanges: { google: [], nextcloud: [] }
 };
 
 
@@ -212,6 +218,9 @@ async function loadAll() {
 
   // 🆕 옵션A — 이전에 동기화했던 범위 복원
   await loadSyncedRange();
+  // 🆕 동기화 범위 설정 + 범위 밖 "본 기간" 기록 복원
+  await loadSyncRangeSettings();
+  await loadViewedRanges();
 }
 
 /**
@@ -1927,6 +1936,7 @@ function openEventModal(event, defaultDate) {
   // 모달이 열릴 때마다 알람 선택 초기화
   state.editingAlarms = new Set();
   state.editingInstanceContext = null;   // 🆕 v26.5.8a 인스턴스 컨텍스트 초기화
+  state.editingReadOnly = false;         // 🆕 범위 밖 캐시 읽기 전용 여부
 
   // ── source 드롭다운 옵션 활성화/비활성화 ──
   // Google이 연결 안 됐으면 'google' 옵션을 disabled로
@@ -2012,6 +2022,12 @@ function openEventModal(event, defaultDate) {
     fillRecurrenceForm(editTarget.recurrence || '');
 
     delBtn.style.display = 'inline-block';   // 편집 시에만 "삭제" 버튼 보임
+
+    // 🆕 설정 범위 밖 원격 일정 = 읽기 전용 캐시 → 저장/삭제 막고 안내
+    if (isReadOnlyCached(editTarget)) {
+      state.editingReadOnly = true;
+      title.textContent += ' ' + t('modal.readOnlyCachedSuffix');
+    }
   } else {
     // ─── 신규 모드: 빈 폼 ───
     state.editingEventId = null;
@@ -2045,6 +2061,7 @@ function openEventModal(event, defaultDate) {
 
   updateAlarmChips();         // 칩 disabled/active 상태 갱신
   updateRecurrenceUiVisibility();   // 🆕 반복 종료 옵션 표시 상태 갱신
+  applyReadOnlyEventUi(!!state.editingReadOnly);   // 🆕 범위 밖 캐시 편집 불가 표시
 
   // 🆕 v26.5.8e alwaysOnTop 임시 OFF + focus 강제 (키보드 입력 우회) — showModal 이 처리.
   //   모달이 보이는 시점엔 이미 OS-level focus 가 우리 윈도우에 있도록.
@@ -2770,6 +2787,7 @@ function applyAndValidateEnd(data) {
  * 신규/편집/source 변경/🆕 반복 시리즈 처리를 모두 다룸.
  */
 async function saveEvent() {
+  if (state.editingReadOnly) { toast(t('toast.readOnlyCached'), 3500); return; }   // 🆕
   const title = document.getElementById('evTitle').value.trim();
   if (!title) { toast(t('toast.titleRequired')); return; }
 
@@ -3250,6 +3268,7 @@ async function saveRecurrenceEdit(ctx, formData, formRrule) {
  */
 async function deleteEvent() {
   if (!state.editingEventId) return;
+  if (state.editingReadOnly) { toast(t('toast.readOnlyCached'), 3500); return; }   // 🆕 로컬 캐시 일정 — 서버 삭제 금지
 
   // 🆕 v26.5.8a 반복 인스턴스 삭제 분기
   const ctx = state.editingInstanceContext;
@@ -3614,9 +3633,12 @@ async function syncFromGoogle({ silent = false } = {}) {
     if (r.ok) {
       calOk = true;
       if (r.isFull) {
-        // 전체 동기화: 기존 google 일정 다 지우고 새로 채움
-        state.events = state.events.filter(e => e.source !== 'google');
-        state.events.push(...(r.events || []));
+        // 🆕 전체 동기화: 새로 fullSync 된 캘린더의 "기본 윈도우 안" 일정만 교체.
+        //   - 윈도우 밖 일정은 읽기 전용 캐시로 보존 (만료는 purgeExpiredCaches)
+        //   - 선택 해제된 캘린더 일정은 제거 (기존 동작 유지)
+        //   - 증분으로 온 다른 캘린더는 deletedIds/upsert 로 처리
+        mergeFullSyncResult('google', r, e => e.googleCalendarId,
+          r.fullCalendarIds, r.selectedCalendarIds);
       } else {
         // 증분: 삭제된 거 제거 + 변경된 거 upsert
         // 🆕 v26.5.8d cascade — 마스터가 deletedIds 에 있으면 그 자식 인스턴스(recurrenceId === master.id)도 같이 정리
@@ -3671,8 +3693,8 @@ async function syncFromGoogle({ silent = false } = {}) {
   renderMemos();
   scheduleAlarms();
 
-  // 🆕 동기화된 범위 기록 (백엔드의 PAST_DAYS=7, FUTURE_DAYS=56 와 동일)
-  if (calOk) updateSyncedRange('google', -7, 56);
+  // 🆕 동기화된 범위 기록 (백엔드와 같은 설정값 사용)
+  if (calOk) updateSyncedRange('google');
 
   // 결과 토스트
   if (!silent) {
@@ -3696,18 +3718,24 @@ async function syncFromNextcloud({ silent = false } = {}) {
       return;
     }
     if (r.isFull) {
-      // 전체: nextcloud 일정 다 갈아엎음
-      state.events = state.events.filter(e => e.source !== 'nextcloud');
-      state.events.push(...(r.events || []));
+      // 🆕 전체: fullSync 된 캘린더의 기본 윈도우 안만 교체 (윈도우 밖은 캐시 보존)
+      mergeFullSyncResult('nextcloud', r, e => e.ncCalendarUrl,
+        r.fullCalendarUrls, r.selectedCalendarUrls);
     } else {
       // 증분 처리
       // 🆕 v26.5.8d cascade — NextCloud 는 마스터/분리 인스턴스가 같은 ICS 묶음이라
       //   서버에서 묶음 통째로 삭제 시 deletedIds 에는 마스터 ID 1개만 들어옴.
       //   여기서 그 마스터의 자식들(recurrenceId === master.id)도 같이 정리해야 orphan 안 남음.
+      //   🆕 NextCloud 의 deletedIds 는 "기본 윈도우에서 사라진 것"이라 날짜가 지나
+      //   윈도우 밖으로 밀려난 일정도 섞임 → 윈도우 안(또는 반복) 일정에만 적용해
+      //   범위 밖 캐시는 보존. (서버 삭제가 아님 — 로컬 state 만 갱신)
       if (r.deletedIds?.length) {
+        const win = getBaseWindow();
+        const del = new Set(r.deletedIds);
+        const inWin = e => !window.SyncRange.isOutsideWindow(e, win);
+        const removedMasters = new Set(state.events.filter(e => del.has(e.id) && inWin(e)).map(e => e.id));
         state.events = state.events.filter(e =>
-          !r.deletedIds.includes(e.id) &&
-          !r.deletedIds.includes(e.recurrenceId)
+          !(del.has(e.id) && inWin(e)) && !removedMasters.has(e.recurrenceId)
         );
       }
       (r.events || []).forEach(g => {
@@ -3720,7 +3748,7 @@ async function syncFromNextcloud({ silent = false } = {}) {
     renderCalendar();
     scheduleAlarms();
     // 🆕 동기화된 범위 기록
-    updateSyncedRange('nextcloud', -7, 56);
+    updateSyncedRange('nextcloud');
     if (!silent) toast(t('toast.nextcloudSyncCompleteFmt', { n: (r.events || []).length }));
   } catch (e) {
     if (!silent) toast(t('toast.nextcloudError', { err: e.message }), 3500);
@@ -3761,10 +3789,8 @@ async function triggerSyncAll() {
  * 동기화 직후엔 그 범위로 설정.
  * 🆕 변경 즉시 디스크에도 저장
  */
-function updateSyncedRange(source, pastDays, futureDays) {
-  const now = new Date();
-  const start = new Date(now); start.setDate(now.getDate() + pastDays); start.setHours(0,0,0,0);
-  const end   = new Date(now); end.setDate(now.getDate() + futureDays); end.setHours(23,59,59,999);
+function updateSyncedRange(source) {
+  const { start, end } = getBaseWindow();   // 🆕 설정값 기반
 
   const cur = state.syncedRange[source];
   // 기존 범위가 더 넓으면 보존 (사용자가 멀리 봤던 범위 유지)
@@ -3819,59 +3845,129 @@ function rangeDifference(a1, a2, b1, b2) {
   return out;
 }
 
+/** 🆕 설정값 기준 기본 동기화 윈도우 (백엔드 sync-settings 와 같은 계산 함수) */
+function getBaseWindow(now) {
+  return window.SyncRange.computeBaseWindow(now || new Date(), state.syncRangeSettings);
+}
+
+/** 🆕 설정 범위 밖 원격 일정인지 (= 읽기 전용 로컬 캐시) */
+function isReadOnlyCached(ev) {
+  return window.SyncRange.isOutsideWindow(ev, getBaseWindow());
+}
+
+/** 🆕 일정 모달 읽기 전용 표시 (저장·삭제 버튼 비활성 + 안내) */
+function applyReadOnlyEventUi(on) {
+  const saveBtn = document.getElementById('saveEvent');
+  const delBtn = document.getElementById('deleteEvent');
+  if (saveBtn) { saveBtn.disabled = on; saveBtn.title = on ? t('toast.readOnlyCached') : ''; }
+  if (delBtn)  { delBtn.disabled = on;  delBtn.title  = on ? t('toast.readOnlyCached') : ''; }
+  let hint = document.getElementById('evReadOnlyHint');
+  if (!hint && saveBtn && saveBtn.parentElement) {
+    hint = document.createElement('div');
+    hint.id = 'evReadOnlyHint';
+    hint.className = 'settings-hint';
+    hint.style.cssText = 'width:100%;margin:0 0 6px;color:#e67c73';
+    saveBtn.parentElement.insertBefore(hint, saveBtn.parentElement.firstChild);
+  }
+  if (hint) { hint.textContent = on ? '🔒 ' + t('toast.readOnlyCached') : ''; hint.style.display = on ? '' : 'none'; }
+}
+
+/** 🆕 동기화 범위 설정 로드 (메인 프로세스 electron-store) */
+async function loadSyncRangeSettings() {
+  if (!isElectron || !window.electronAPI.getSyncRangeSettings) {
+    state.syncRangeSettings = window.SyncRange.normalizeSettings(state.syncRangeSettings);
+    return;
+  }
+  try {
+    state.syncRangeSettings = window.SyncRange.normalizeSettings(await window.electronAPI.getSyncRangeSettings());
+  } catch (e) { console.warn('[sync-range] 설정 로드 실패:', e.message); }
+}
+
+async function saveViewedRanges() { await saveJSON('cal_viewed_ranges_v1', state.viewedRanges); }
+
 /**
- * 현재 화면에 보이는 5주 그리드가 동기화된 범위 안에 있는지 확인하고,
- * 벗어난 부분이 있으면 백그라운드로 자동 fetch.
- *
- * 마진 7일: 사용자가 다음 주로 이동할 때 매번 fetch하는 걸 줄이려고
- * 미리 좀 여유있게.
+ * 🆕 "본 기간" 기록 복원. 처음이면 기존 syncedRange 중 기본 윈도우 밖 부분을
+ * 지금 본 것으로 간주해 마이그레이션 (업데이트 직후 캐시가 바로 지워지지 않게).
+ */
+async function loadViewedRanges() {
+  const saved = await loadJSON('cal_viewed_ranges_v1');
+  if (saved && typeof saved === 'object') {
+    ['google', 'nextcloud'].forEach(src => {
+      state.viewedRanges[src] = Array.isArray(saved[src]) ? saved[src] : [];
+    });
+    return;
+  }
+  const win = getBaseWindow();
+  ['google', 'nextcloud'].forEach(src => {
+    const r = state.syncedRange[src];
+    if (!r.start || !r.end) return;
+    if (r.start < win.start) state.viewedRanges[src] = window.SyncRange.touchViewedRange(state.viewedRanges[src], r.start, win.start);
+    if (r.end > win.end)     state.viewedRanges[src] = window.SyncRange.touchViewedRange(state.viewedRanges[src], win.end, r.end);
+  });
+  await saveViewedRanges();
+}
+
+/**
+ * 🆕 fullSync 결과 병합.
+ * - fullCalendars 의 일정 중 기본 윈도우 안 → 서버 결과로 교체
+ * - 선택 해제된 캘린더 일정 → 제거 (로컬만)
+ * - 나머지(윈도우 밖 캐시, 증분 캘린더)는 보존 후 결과 upsert
+ */
+function mergeFullSyncResult(source, r, calKeyOf, fullCalendars, selectedCalendars) {
+  const win = getBaseWindow();
+  const full = new Set(fullCalendars || []);
+  const selected = selectedCalendars ? new Set(selectedCalendars) : null;
+  const removed = new Set();
+  state.events = state.events.filter(e => {
+    if (e.source !== source) return true;
+    const key = calKeyOf(e);
+    if (selected && key && !selected.has(key)) { removed.add(e.id); return false; }
+    // 반복 마스터(NextCloud)는 윈도우 밖 시작일이어도 fullSync 결과에 포함되므로 교체 대상
+    if (full.has(key) && (window.SyncRange.eventOverlaps(e, win.start, win.end) || e.recurrence)) {
+      removed.add(e.id); return false;
+    }
+    return true;
+  });
+  state.events = state.events.filter(e => !(e.recurrenceId && removed.has(e.recurrenceId)));
+  if (r.deletedIds?.length) {
+    const del = new Set(r.deletedIds);
+    state.events = state.events.filter(e => !del.has(e.id) && !del.has(e.recurrenceId));
+  }
+  (r.events || []).forEach(g => {
+    const idx = state.events.findIndex(e => e.id === g.id);
+    if (idx >= 0) state.events[idx] = g;
+    else          state.events.push(g);
+  });
+}
+
+// 🆕 같은 (source, 기간) 재조정은 60초 안에 다시 요청하지 않음
+const _reconcileDebouncer = window.SyncRange.createReconcileDebouncer(window.SyncRange.RECONCILE_TTL_MS);
+
+/**
+ * 🆕 현재 화면(5주 그리드)에 보이는 기간 전체를 서버와 재조정.
+ * 이미 받은 기간이어도 추가·수정·삭제 모두 반영 (해당 기간 로컬 일정을 서버 결과로 diff 교체).
+ * 같은 기간은 60초 안에 재요청하지 않음.
  */
 async function ensureRangeSynced() {
   if (!isElectron) return;
 
-  // 현재 화면 범위 (그리드 시작 + 35일)
   const viewStart = new Date(state.viewWeekStart);
   viewStart.setHours(0,0,0,0);
   const viewEnd = new Date(viewStart);
   viewEnd.setDate(viewStart.getDate() + 34);   // 35일
   viewEnd.setHours(23,59,59,999);
 
-  // 마진 7일 — 미리 좀 여유있게 fetch
-  const need_start = new Date(viewStart); need_start.setDate(viewStart.getDate() - 7);
-  const need_end   = new Date(viewEnd);   need_end.setDate(viewEnd.getDate() + 7);
-
   const tasks = [];
-
-  // ── Google ──
-  if (state.googleAuthenticated) {
-    const r = state.syncedRange.google;
-    if (!r.start || !r.end) {
-      // 아예 동기화 안 된 상태 — 일단 기본 동기화부터
-      tasks.push(syncFromGoogle({ silent: true }));
-    } else {
-      const gaps = rangeDifference(need_start, need_end, r.start, r.end);
-      if (gaps.length > 0) {
-        // 가장 바깥 범위 한 번에 (gap이 2개여도 한 호출로)
-        const gapStart = gaps[0][0];
-        const gapEnd = gaps[gaps.length - 1][1];
-        tasks.push(fetchAndMergeGoogle(gapStart, gapEnd));
-      }
-    }
-  }
-
-  // ── NextCloud ──
-  if (state.nextcloudAuthenticated) {
-    const r = state.syncedRange.nextcloud;
-    if (!r.start || !r.end) {
-      tasks.push(syncFromNextcloud({ silent: true }));
-    } else {
-      const gaps = rangeDifference(need_start, need_end, r.start, r.end);
-      if (gaps.length > 0) {
-        const gapStart = gaps[0][0];
-        const gapEnd = gaps[gaps.length - 1][1];
-        tasks.push(fetchAndMergeNextcloud(gapStart, gapEnd));
-      }
-    }
+  const plan = [
+    ['google',    state.googleAuthenticated,    () => syncFromGoogle({ silent: true })],
+    ['nextcloud', state.nextcloudAuthenticated, () => syncFromNextcloud({ silent: true })]
+  ];
+  for (const [src, authed, baseSync] of plan) {
+    if (!authed) continue;
+    const r = state.syncedRange[src];
+    if (!r.start || !r.end) { tasks.push(baseSync()); continue; }
+    if (!_reconcileDebouncer.shouldRun(window.SyncRange.rangeKey(src, viewStart, viewEnd))) continue;
+    tasks.push(reconcileRemoteRange(src, viewStart, viewEnd, { touch: true }));
   }
 
   if (tasks.length > 0) {
@@ -3880,59 +3976,80 @@ async function ensureRangeSynced() {
   }
 }
 
-/** Google에서 특정 범위만 fetch + state에 합치기 */
-async function fetchAndMergeGoogle(start, end) {
+/**
+ * 🆕 [start,end] 기간을 서버에서 다시 받아 로컬과 diff (추가·수정·삭제 반영).
+ * - 로컬 state 만 바꿈. 서버 쪽 삭제 API 는 절대 호출하지 않음.
+ * - 실패한 캘린더 소속 일정은 삭제 판단에서 제외.
+ * - touch=true(사용자가 화면으로 본 경우)이고 기본 윈도우 밖이면 "본 기간" lastSeen 갱신.
+ *   (시작 시 백그라운드 재조정은 lastSeen 을 갱신하지 않음 → 만료가 정상 동작)
+ */
+async function reconcileRemoteRange(source, start, end, { touch = false } = {}) {
+  const isG = source === 'google';
   try {
-    const r = await window.electronAPI.fetchGoogleRange({
-      startISO: start.toISOString(),
-      endISO: end.toISOString()
+    const api = isG ? window.electronAPI.fetchGoogleRange : window.electronAPI.fetchNextcloudRange;
+    const r = await api({ startISO: start.toISOString(), endISO: end.toISOString() });
+    if (!r.ok) {
+      console.warn(`[range-sync] ${source}:`, r.error);
+      _reconcileDebouncer.forget(window.SyncRange.rangeKey(source, start, end));
+      return;
+    }
+    const res = window.SyncRange.reconcileRange(state.events, r.events || [], {
+      source, start, end,
+      calendarKey: isG ? (e => e.googleCalendarId) : (e => e.ncCalendarUrl),
+      failedCalendars: isG ? r.failedCalendarIds : r.failedCalendarUrls
     });
-    if (!r.ok) { console.warn('[range-sync] google:', r.error); return; }
+    state.events = res.events;
 
-    // upsert: 같은 id가 있으면 덮어쓰고, 없으면 추가
-    (r.events || []).forEach(g => {
-      const idx = state.events.findIndex(e => e.id === g.id);
-      if (idx >= 0) state.events[idx] = g;
-      else          state.events.push(g);
-    });
+    const cur = state.syncedRange[source];
+    if (!cur.start || start < cur.start) cur.start = new Date(start);
+    if (!cur.end || end > cur.end)       cur.end = new Date(end);
+    saveSyncedRange();
 
-    // 동기화 범위 확장
-    const cur = state.syncedRange.google;
-    if (cur.start && start < cur.start) cur.start = start;
-    if (cur.end && end > cur.end)       cur.end = end;
-    if (!cur.start) { cur.start = start; cur.end = end; }
-    saveSyncedRange();   // 🆕 즉시 저장
+    const win = getBaseWindow();
+    if (touch && (start < win.start || end > win.end)) {
+      state.viewedRanges[source] = window.SyncRange.touchViewedRange(state.viewedRanges[source], start, end);
+      saveViewedRanges();
+    }
 
     await saveEvents();
     renderCalendar();
-  } catch (e) { console.warn('[range-sync] google 예외:', e.message); }
+  } catch (e) { console.warn(`[range-sync] ${source} 예외:`, e.message); }
 }
 
-/** NextCloud에서 특정 범위만 fetch + state에 합치기 */
-async function fetchAndMergeNextcloud(start, end) {
-  try {
-    const r = await window.electronAPI.fetchNextcloudRange({
-      startISO: start.toISOString(),
-      endISO: end.toISOString()
+// ┌──────────────────────────────────────────────────────────────┐
+// │ 🆕 범위 밖 캐시 만료 — 로컬 state/저장소에서만 제거.           │
+// │   ⚠ 이 블록에서는 electronAPI.delete* 를 절대 호출하지 않음.   │
+// │   (tests/sync-range.test.js 가 정적 검사)                      │
+// └──────────────────────────────────────────────────────────────┘
+// CACHE-PURGE-BEGIN
+async function purgeExpiredCaches() {
+  const days = state.syncRangeSettings.cacheRetentionDays;
+  if (!days) return;   // 0 = 지우지 않음
+  const win = getBaseWindow();
+  let changed = false;
+  for (const src of ['google', 'nextcloud']) {
+    const res = window.SyncRange.purgeExpiredCache({
+      events: state.events,
+      viewedRanges: state.viewedRanges[src],
+      syncedRange: state.syncedRange[src],
+      window: win,
+      retentionDays: days,
+      source: src
     });
-    if (!r.ok) { console.warn('[range-sync] nextcloud:', r.error); return; }
-
-    (r.events || []).forEach(g => {
-      const idx = state.events.findIndex(e => e.id === g.id);
-      if (idx >= 0) state.events[idx] = g;
-      else          state.events.push(g);
-    });
-
-    const cur = state.syncedRange.nextcloud;
-    if (cur.start && start < cur.start) cur.start = start;
-    if (cur.end && end > cur.end)       cur.end = end;
-    if (!cur.start) { cur.start = start; cur.end = end; }
-    saveSyncedRange();   // 🆕 즉시 저장
-
+    if (res.removedIds.length || res.viewedRanges.length !== state.viewedRanges[src].length) changed = true;
+    state.events = res.events;
+    state.viewedRanges[src] = res.viewedRanges;
+    if (res.syncedRange) state.syncedRange[src] = res.syncedRange;
+    if (res.removedIds.length) console.log(`[cache] ${src} 범위 밖 캐시 ${res.removedIds.length}개 로컬에서 정리`);
+  }
+  if (changed) {
+    await saveViewedRanges();
+    await saveSyncedRange();
     await saveEvents();
     renderCalendar();
-  } catch (e) { console.warn('[range-sync] nextcloud 예외:', e.message); }
+  }
 }
+// CACHE-PURGE-END
 
 /**
  * 동기화 중 표시 — 헤더 옆에 작은 점 같은 거.
@@ -3962,46 +4079,21 @@ function debouncedEnsureRangeSynced() {
 }
 
 /**
- * 🆕 옵션A — 앱 시작 시 "기본 윈도우 밖" 범위 갱신.
- *
- * loadSyncedRange로 복원된 syncedRange가 기본 윈도우(±1주~8주)보다
- * 넓으면 그 부분만 fetchRange로 갱신.
- *
- * 동작 예시:
- * - 어제 1년 후 일정까지 봤다 → syncedRange.end = 오늘 + 365일
- * - 오늘 앱 시작 → syncFromGoogle()는 ±8주만 정확히 동기화
- * - 그 다음 이 함수가 +56일 ~ +365일 부분을 fetchRange로 갱신
- *   (변경/삭제는 못 잡지만, 새로 추가된 일정은 잡힘)
+ * 🆕 앱 시작 시 "기본 윈도우 밖"에서 최근에 본 기간들을 서버와 재조정.
+ * 예전엔 추가만 반영했지만 이제 reconcileRemoteRange 로 추가·수정·삭제 모두 반영.
+ * 만료되지 않은 viewedRanges 중 최근 12개만 (네트워크 보호).
  */
 async function refreshExtendedRanges() {
   if (!isElectron) return;
-
-  // 기본 윈도우 (백엔드 PAST_DAYS=7, FUTURE_DAYS=56과 동일)
-  const now = new Date();
-  const baseStart = new Date(now); baseStart.setDate(now.getDate() - 7); baseStart.setHours(0,0,0,0);
-  const baseEnd   = new Date(now); baseEnd.setDate(now.getDate() + 56); baseEnd.setHours(23,59,59,999);
-
   const tasks = [];
-
-  // ── Google ──
-  if (state.googleAuthenticated) {
-    const r = state.syncedRange.google;
-    if (r.start && r.end) {
-      // 기본 윈도우 밖 (양쪽) 부분 갱신
-      if (r.start < baseStart) tasks.push(fetchAndMergeGoogle(r.start, baseStart));
-      if (r.end > baseEnd)     tasks.push(fetchAndMergeGoogle(baseEnd, r.end));
-    }
+  const plan = [['google', state.googleAuthenticated], ['nextcloud', state.nextcloudAuthenticated]];
+  for (const [src, authed] of plan) {
+    if (!authed) continue;
+    (state.viewedRanges[src] || []).slice(0, 12).forEach(r => {
+      const s = new Date(r.start), e = new Date(r.end);
+      if (_reconcileDebouncer.shouldRun(window.SyncRange.rangeKey(src, s, e))) tasks.push(reconcileRemoteRange(src, s, e));
+    });
   }
-
-  // ── NextCloud ──
-  if (state.nextcloudAuthenticated) {
-    const r = state.syncedRange.nextcloud;
-    if (r.start && r.end) {
-      if (r.start < baseStart) tasks.push(fetchAndMergeNextcloud(r.start, baseStart));
-      if (r.end > baseEnd)     tasks.push(fetchAndMergeNextcloud(baseEnd, r.end));
-    }
-  }
-
   if (tasks.length > 0) {
     showSyncIndicator(true);
     try { await Promise.all(tasks); } finally { showSyncIndicator(false); }
@@ -4243,6 +4335,7 @@ document.querySelectorAll('.layout-card').forEach(card => {
 /** 설정 모달 열기 */
 function openSettingsModal() {
   showModal('settingsPanel');
+  initSyncRangeSelects();   // 🆕 동기화 기간 드롭다운
   // 캘린더 탭의 카테고리/캘린더 목록 채우기.
   // 원격 목록은 한 번 불러오면 캐시되고, 여기선 저장된 선택 상태만 다시 맞춘다.
   refreshAccountPane().catch(err => console.error('refreshAccountPane failed:', err));
@@ -4283,6 +4376,65 @@ function initLanguageSelect() {
   sel.value = state.language;
 }
 
+/** 🆕 일수 → 현재 언어 라벨 (1주/1개월/8주 등) */
+function syncDaysLabel(days) {
+  const map = { 7: 'w1', 30: 'm1', 56: 'w8', 60: 'm2', 90: 'm3', 180: 'm6', 365: 'y1' };
+  if (days === 0) return t('settings.syncRange.never');
+  if (map[days]) return t('settings.syncRange.' + map[days]);
+  return t('settings.syncRange.daysFmt', { n: days });
+}
+
+/** 🆕 동기화 기간 드롭다운 채우기 — 저장값이 목록 밖(기본 56일 등)이면 그 값도 옵션으로 추가 */
+function initSyncRangeSelects() {
+  const SR = window.SyncRange;
+  const cur = state.syncRangeSettings;
+  const fill = (id, options, value, defVal) => {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    const list = options.includes(value) ? options.slice() : options.concat([value]).sort((a, b) => (a || 1e9) - (b || 1e9));
+    sel.innerHTML = list.map(v =>
+      `<option value="${v}">${escapeHtml(syncDaysLabel(v) + (v === defVal ? ' ' + t('settings.syncRange.defaultMark') : ''))}</option>`
+    ).join('');
+    sel.value = String(value);
+  };
+  fill('syncPastSelect',   SR.PAST_OPTIONS,   cur.pastDays,   SR.DEFAULTS.pastDays);
+  fill('syncFutureSelect', SR.FUTURE_OPTIONS, cur.futureDays, SR.DEFAULTS.futureDays);
+  fill('syncCacheSelect',  SR.CACHE_OPTIONS,  cur.cacheRetentionDays, SR.DEFAULTS.cacheRetentionDays);
+}
+
+/** 🆕 동기화 범위 설정 변경 → 메인에 저장(범위 바뀌면 syncToken/etagMap 무효화) → 재동기화 */
+async function onSyncRangeSettingChange() {
+  const partial = {
+    pastDays: Number(document.getElementById('syncPastSelect').value),
+    futureDays: Number(document.getElementById('syncFutureSelect').value),
+    cacheRetentionDays: Number(document.getElementById('syncCacheSelect').value)
+  };
+  let rangeChanged = false;
+  if (isElectron && window.electronAPI.setSyncRangeSettings) {
+    const r = await window.electronAPI.setSyncRangeSettings(partial);
+    rangeChanged = !!r.rangeChanged;
+    state.syncRangeSettings = window.SyncRange.normalizeSettings(r);
+  } else {
+    state.syncRangeSettings = window.SyncRange.normalizeSettings(partial);
+  }
+  initSyncRangeSelects();
+  _reconcileDebouncer.reset();
+  if (rangeChanged) {
+    // 새 기본 윈도우로 fullSync (윈도우 안 교체, 밖은 캐시로 남음)
+    const tasks = [];
+    if (state.googleAuthenticated)    tasks.push(syncFromGoogle({ silent: true }));
+    if (state.nextcloudAuthenticated) tasks.push(syncFromNextcloud({ silent: true }));
+    await Promise.all(tasks);
+  }
+  await purgeExpiredCaches();
+  renderCalendar();
+  toast(t('toast.syncRangeSaved'));
+}
+['syncPastSelect', 'syncFutureSelect', 'syncCacheSelect'].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('change', () => onSyncRangeSettingChange().catch(err => console.error(err)));
+});
+
 // ─── 언어 변경 → 화면 즉시 반영 + 저장 ───
 document.getElementById('languageSelect').addEventListener('change', async (e) => {
   state.language = e.target.value;
@@ -4297,6 +4449,7 @@ document.getElementById('languageSelect').addEventListener('change', async (e) =
   renderDefaultTargetLabel();
   renderAcctCatList();          // 🆕 v26.0925.1
   renderUpdateStatus();         // 🆕 v26.925.2
+  initSyncRangeSelects();       // 🆕 동기화 기간 라벨
   await refreshGoogleAuthStatus();      // 인라인 캘린더 목록도 같이 다시 그려짐
   await refreshNextcloudAuthStatus();
 });
@@ -4817,6 +4970,8 @@ async function revokeAccount(source) {
     state.events = state.events.filter(e => e.source !== source);
     state.syncedRange[source] = { start: null, end: null };   // 동기화 범위 초기화
     saveSyncedRange();
+    state.viewedRanges[source] = [];   // 🆕 본 기간 기록도 정리
+    saveViewedRanges();
     await saveEvents();
     await a.afterRevoke();
     a.rows = []; a.error = null;
@@ -5493,11 +5648,13 @@ if (isElectron) {
   //     기본 윈도우(±1주~8주)는 위 7)에서 정확히 동기화됨.
   //     그 외 영역은 단순 fetchRange (변경/삭제는 못 잡지만 새로 추가된 건 잡힘).
   //     기본 윈도우 동기화가 끝난 뒤 시작하도록 3초 지연.
+  purgeExpiredCaches();   // 🆕 시작 시 만료된 범위 밖 캐시 정리 (로컬만, 서버 삭제 없음)
   setTimeout(refreshExtendedRanges, 3000);
 
   // 9) 5분마다 자동 동기화 (기본 윈도우만)
   setInterval(() => {
     if (state.googleAuthenticated)    syncFromGoogle({ silent: true });
     if (state.nextcloudAuthenticated) syncFromNextcloud({ silent: true });
+    purgeExpiredCaches();   // 🆕 범위 밖 캐시 만료 (로컬만)
   }, 5 * 60 * 1000);
 })();

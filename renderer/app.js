@@ -945,14 +945,20 @@ function anyModalOpen() {
  */
 function aotBypass(on) {
   if (isElectron && window.electronAPI.modalAotBypass) {
-    window.electronAPI.modalAotBypass(!!on).catch(() => {});
+    return window.electronAPI.modalAotBypass(!!on).catch(() => {});
   }
+  return Promise.resolve();
 }
 
 /** 모달 열기. bypass 를 먼저 걸어 모달이 보이는 시점엔 이미 포커스가 우리 창에 있게. */
 function showModal(id) {
-  aotBypass(true);
-  document.getElementById(id).classList.add('show');
+  const ready = aotBypass(true);
+  const bg = document.getElementById(id);
+  bg.classList.add('show');
+  // 🆕 v26.1119.1 스크롤형 모달은 열 때마다 맨 위(첫 입력칸)부터
+  const box = bg.querySelector('.modal');
+  if (box) box.scrollTop = 0;
+  return ready;
 }
 
 /** 모달 닫기. 다른 모달이 아직 떠있으면 bypass 유지(+포커스를 그쪽으로), 마지막이면 복원.
@@ -2066,7 +2072,7 @@ function openEventModal(event, defaultDate) {
   // 🆕 v26.5.8e alwaysOnTop 임시 OFF + focus 강제 (키보드 입력 우회) — showModal 이 처리.
   //   모달이 보이는 시점엔 이미 OS-level focus 가 우리 윈도우에 있도록.
   //   (실패해도 무해 — 아래 setTimeout focusWindow fallback)
-  showModal('eventModalBg');
+  const aotReady = showModal('eventModalBg');
   // 🆕 v26.0925.1 열린 직후의 폼 상태를 기억 — Esc/바깥 우클릭으로 닫을 때 "바뀐 게 있는지" 판단용
   eventFormOpenedSig = eventFormSignature();
 
@@ -2074,7 +2080,10 @@ function openEventModal(event, defaultDate) {
   // alwaysOnTop 위젯이 background 상태에서 모달을 열 때
   // JS focus만으로는 키보드 입력이 안 들어오는 문제 해결.
   // (v26.5.8e 의 modalAotBypass 가 본 해결책. focusWindow 는 fallback 으로 유지)
+  // 🆕 v26.1119.1 bypass(포커스 가져오기) 완료를 기다린 뒤 제목칸 focus —
+  //   예전엔 50ms 타이머와 경주해서 OS focus 가 넘어오기 전에 실행될 수 있었음.
   setTimeout(async () => {
+    await aotReady;
     if (isElectron && window.electronAPI.focusWindow) {
       try { await window.electronAPI.focusWindow(); } catch {}
     }

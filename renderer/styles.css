@@ -767,8 +767,21 @@ body {
   justify-content: center;
   z-index: 999;
   backdrop-filter: blur(2px);
+  /* 🆕 v26.1119.1 타이틀바 드래그 영역(-webkit-app-region: drag)은 Windows 에서 OS 가
+     직접 히트테스트해서, 위에 덮인 DOM(모달)이 있어도 그 띠(상단 36px)의 클릭을
+     창 이동으로 가져가 버린다 → 모달 상단(제목·시작일·종료일)이 클릭 불가.
+     오버레이 전체를 no-drag 로 명시해 드래그 영역을 끊는다. */
+  -webkit-app-region: no-drag;
+  padding: 12px;
 }
 .modal-bg.show { display: flex; }
+/* 🆕 v26.1119.1 창보다 모달이 길면 가운데 정렬 때문에 위쪽이 창 밖으로 잘려 타이틀바
+   밑에 깔렸다. 창 높이 안에 넣고 넘치면 모달 안에서 스크롤.
+   (설정 모달은 자체 max-height + 내부 스크롤이 있어 제외) */
+.modal:not(.settings-modal) {
+  max-height: 100%;
+  overflow-y: auto;
+}
 .modal {
   background: var(--surface-bg);
   color: var(--surface-fg);

@@ -46,6 +46,7 @@ const state = {
   locked: true,                 // 창 잠금 상태 (잠그면 드래그/리사이즈 불가)
   events: [],                   // 모든 일정 목록 (로컬+Google+NextCloud 합쳐서 보관)
   memos: [],                    // 모든 메모/할 일 목록 (로컬+Google Tasks)
+  doneKeys: new Set(),          // 🆕 v26.1120.1 완료 체크한 일정 키 (eventDoneKey, 이 기기에만)
   memoFilter: 'all',            // 메모 탭 필터: 'all' | 'active' | 'gtasks'
   opacity: 0.88,                // 위젯 투명도 (0~1)
   fontSize: 10,                 // 기본 폰트 크기 (pt)
@@ -181,6 +182,10 @@ async function loadAll() {
   // 🆕 v26.7.22 로컬 카테고리 — 첫 실행이면 빈 목록 (= 모든 로컬 일정이 "(분류 없음)").
   //   일정과 별도 키라 스키마 버전도 따로 (cal_categories_v1).
   const cats = await loadJSON('cal_categories_v1');
+
+  // 🆕 v26.1120.1 완료 체크 목록 (없거나 깨졌으면 빈 목록)
+  const doneList = await loadJSON('cal_done_v1');
+  state.doneKeys = new Set(Array.isArray(doneList) ? doneList : []);
   state.categories = Array.isArray(cats) ? cats.filter(c => c && c.id && c.name) : getDefaultCategories();
 
   // 🆕 v26.7.22 개발 중 자동 생성됐던 샘플 카테고리(업무/개인/가족) 정리.
@@ -240,6 +245,31 @@ async function saveMemos() {
 /** 🆕 v26.7.22 로컬 카테고리 저장 (일정/설정과 별도 키) */
 async function saveCategories() {
   await saveJSON('cal_categories_v1', state.categories);
+}
+
+// ─────────────────────────────────────────────────────────────────
+//  🆕 v26.1120.1 일정 완료 체크 (이 기기에만 저장)
+//  Google Calendar·NextCloud VEVENT 에는 "완료" 개념이 없어서 서버로 보내지 않고
+//  일정 키 목록만 따로 보관한다 (cal_done_v1 = ["<key>", ...]).
+//  반복 일정은 날짜마다 따로 체크되도록 가상 인스턴스는 "<마스터id>@<날짜>" 를 키로 쓴다.
+// ─────────────────────────────────────────────────────────────────
+
+/** 일정 → 완료 저장 키 */
+function eventDoneKey(e) {
+  return e._virtualOf ? `${e._virtualOf}@${e._instanceDate}` : e.id;
+}
+
+/** 완료 체크 여부 */
+function isEventDone(e) {
+  return state.doneKeys.has(eventDoneKey(e));
+}
+
+/** 완료 체크 켜기/끄기 + 저장 */
+async function setEventDone(e, done) {
+  const key = eventDoneKey(e);
+  if (done) state.doneKeys.add(key);
+  else state.doneKeys.delete(key);
+  await saveJSON('cal_done_v1', [...state.doneKeys]);
 }
 
 /** 설정 저장 (레이아웃/투명도/폰트크기/테마) — 일정/메모/카테고리는 따로 저장됨 */
@@ -653,7 +683,7 @@ function renderCalendar() {
         const cat = eventCategory(e);
         const tip = `${escapeHtml(e.title)}${e.time ? ' ' + e.time : ''}${cat ? ' · ' + escapeHtml(cat.name) : ''}`;
         return `
-        <div class="day-event ${e.source}" style="${eventInlineStyle(e)}" title="${tip}" data-id="${e.id}">
+        <div class="day-event ${e.source}${isEventDone(e) ? ' is-done' : ''}" style="${eventInlineStyle(e)}" title="${tip}" data-id="${e.id}">
           ${e.time ? `<b>${e.time.slice(0,5)}</b> ` : ''}${recMark}${escapeHtml(e.title)}
         </div>
       `;
@@ -742,7 +772,8 @@ function showDayPopover(cell, date) {
         const cat = eventCategory(e);
         const catText = cat ? ` · 🏷 ${escapeHtml(cat.name)}` : '';
         return `
-        <div class="pop-event" data-id="${e.id}">
+        <div class="pop-event${isEventDone(e) ? ' is-done' : ''}" data-id="${e.id}">
+          <input type="checkbox" class="pop-event-done" ${isEventDone(e) ? 'checked' : ''} title="${t('popover.doneTitle')}">
           <div class="pop-event-color" style="background:${eventColor(e)}"></div>
           <div class="pop-event-info">
             <div class="pop-event-title">${recMark}${escapeHtml(e.title)}</div>
@@ -766,6 +797,16 @@ function showDayPopover(cell, date) {
   // ── 일정 항목 클릭 → 편집 모달 ──
   // 🆕 v26.5.8a 가상 인스턴스도 클릭으로 편집 가능 (events 클로저에서 직접 찾음)
   pop.querySelectorAll('.pop-event').forEach(el => {
+    // 🆕 v26.1120.1 왼쪽 체크박스 → 완료 표시 (편집 모달은 안 열림)
+    const box = el.querySelector('.pop-event-done');
+    box.addEventListener('click', e => e.stopPropagation());
+    box.addEventListener('change', async () => {
+      const ev = events.find(x => x.id === el.dataset.id);
+      if (!ev) return;
+      el.classList.toggle('is-done', box.checked);
+      await setEventDone(ev, box.checked);
+      renderCalendar();
+    });
     el.addEventListener('click', () => {
       const ev = events.find(x => x.id === el.dataset.id);
       if (ev) { hideDayPopover(); openEventModal(ev); }
@@ -4258,6 +4299,12 @@ document.getElementById('evCategory').addEventListener('change', () => {
   if (hint) hint.textContent = categoryLinkHint(sel.value);
 });
 
+// 🆕 v26.1120.1 카테고리 관리 입구 (설정 화면의 카테고리 목록을 뺀 대신).
+//   일정 모달 위에 겹쳐 열리므로 fromEventModal — 닫을 때 alwaysOnTop 우회를 유지한다.
+document.getElementById('evCategoryManageBtn').addEventListener('click', () => {
+  openCategoryModal({ fromEventModal: true });
+});
+
 // 알람 칩 클릭 → editingAlarms에 추가/제거
 document.querySelectorAll('.alarm-chip').forEach(chip => {
   chip.addEventListener('click', () => {
@@ -4454,9 +4501,7 @@ document.getElementById('languageSelect').addEventListener('change', async (e) =
   // data-i18n 이 안 붙은(JS가 매번 다시 그리는) 동적 텍스트들도 새 언어로 재생성
   renderCalendar();
   renderMemos();
-  renderCategorySummary();
   renderDefaultTargetLabel();
-  renderAcctCatList();          // 🆕 v26.0925.1
   renderUpdateStatus();         // 🆕 v26.925.2
   initSyncRangeSelects();       // 🆕 동기화 기간 라벨
   await refreshGoogleAuthStatus();      // 인라인 캘린더 목록도 같이 다시 그려짐
@@ -4700,8 +4745,6 @@ for (const a of Object.values(ACCT_REMOTE)) {
  * @param {boolean} [opts.reload]  true면 원격 캘린더 목록을 서버에서 다시 가져옴
  */
 async function refreshAccountPane(opts = {}) {
-  renderAcctCatList();
-  renderCategorySummary();
   await loadAcctList('google',    { force: !!opts.reload });
   await loadAcctList('nextcloud', { force: !!opts.reload });
 }
@@ -4722,55 +4765,6 @@ function catLinkBadgeHtml(name) {
     ? `<span class="cat-link-badge linked" title="${t('cat.linkedBadgeTitle')}">🔗 ${linked.join('·')}</span>`
     : `<span class="cat-link-badge unlinked" title="${t('cat.unlinkedBadgeTitle')}">${t('cat.unlinkedBadgeLabel')}</span>`;
 }
-
-function renderAcctCatList() {
-  const list = document.getElementById('acctCatList');
-  if (!list) return;
-
-  const noneIsDefault = isDefaultTarget('local', null);
-  let html = `
-    <div class="cal-select-item cat-none-row">
-      <span class="cat-none-swatch" title="${t('cat.noneSwatchTitle')}"></span>
-      <span class="cat-none-label">${t('category.none')}</span>
-      <button class="cal-default-star ${noneIsDefault ? 'active' : ''}" data-cat="" title="${t('cat.starTitleNone')}">
-        ${noneIsDefault ? '★' : '☆'}
-      </button>
-    </div>
-  `;
-
-  html += (state.categories || []).map(c => {
-    const isDefault = isDefaultTarget('local', c.id);
-    return `
-    <div class="cal-select-item">
-      <span class="cal-color-dot" style="background:${escapeHtml(c.color || '#34a853')}"></span>
-      <span class="cal-name">${escapeHtml(c.name)}</span>
-      ${catLinkBadgeHtml(c.name)}
-      <button class="cal-default-star ${isDefault ? 'active' : ''}" data-cat="${escapeHtml(c.id)}" title="${t('cat.starTitleRow')}">
-        ${isDefault ? '★' : '☆'}
-      </button>
-    </div>
-  `;
-  }).join('');
-
-  list.innerHTML = html;
-
-  list.querySelectorAll('.cal-default-star').forEach(star => {
-    star.addEventListener('click', async e => {
-      e.stopPropagation();
-      const id = star.dataset.cat || null;
-      const wasDefault = isDefaultTarget('local', id);
-      await setDefaultTarget(wasDefault ? null : 'local', wasDefault ? null : id);
-      renderAcctCatList();
-    });
-  });
-}
-
-document.getElementById('acctCatManageBtn').addEventListener('click', e => {
-  e.stopPropagation();
-  closeAllCalendarModals();
-  openCategoryModal();
-});
-
 
 // ─────────────────────────────────────────────────────────────────
 //  원격 캘린더 인라인 목록 (Google / NextCloud 공용)
@@ -4990,7 +4984,6 @@ async function revokeAccount(source) {
     toast(t('toast.disconnectFail', { err: err.message }));
   } finally {
     await a.refresh();
-    renderAcctCatList();   // 연동 뱃지(🔗 G / NC) 갱신
   }
 }
 
@@ -5201,8 +5194,6 @@ document.getElementById('catSave').addEventListener('click', async () => {
   if (orphaned > 0) await saveEvents();
 
   closeCategoryModal();
-  renderCategorySummary();
-  renderAcctCatList();          // 🆕 v26.0925.1 캘린더 탭의 카테고리 목록도 갱신
   renderCalendar();   // 색상 즉시 반영
   renderDefaultTargetLabel();   // 🆕 v26.0728.1 카테고리 이름 변경/삭제가 기본 위치 라벨에 반영되게
 
@@ -5218,15 +5209,6 @@ document.getElementById('catSave').addEventListener('click', async () => {
   toast(cleaned.length === 0 ? t('toast.categoriesClearedAll') : t('toast.categoriesSavedFmt', { n: cleaned.length }));
 });
 
-/** 설정 > 캘린더 탭의 카테고리 요약 라벨 갱신 ("업무 · 개인 · 가족") */
-function renderCategorySummary() {
-  const el = document.getElementById('acctCatSummary');
-  if (!el) return;
-  const cats = state.categories || [];
-  el.textContent = cats.length === 0
-    ? t('category.none')
-    : cats.slice(0, 3).map(c => c.name).join(' · ') + (cats.length > 3 ? t('category.summaryMoreFmt', { n: cats.length - 3 }) : '');
-}
 
 
 // ╔══════════════════════════════════════════════════════════════════╗
@@ -5614,8 +5596,6 @@ if (isElectron) {
   applyFontSize();       // 폰트 크기 → CSS 변수
   applyTheme();          // 🆕 v26.5.9b 테마(light/dark) → html 클래스 + 토글 active
   applyEventWrap();      // 🆕 v26.7.22 일정 제목 여러 줄 → .widget.event-wrap 클래스
-  renderCategorySummary();  // 🆕 v26.7.22 설정 패널의 카테고리 요약 라벨
-  renderAcctCatList();      // 🆕 v26.0925.1 캘린더 탭의 로컬 카테고리 목록
   applyLayout();         // 레이아웃 → 그리드 종류 결정 + renderCalendar 호출
 
   // 3) 메모 렌더링 + 알람 예약

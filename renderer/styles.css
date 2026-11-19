@@ -507,6 +507,8 @@ body {
 .day-event.google { background: var(--evt-google-bg); color: var(--evt-google-fg); border-left-color: #4285f4; }
 .day-event.nextcloud { background: var(--evt-nextcloud-bg); color: var(--evt-nextcloud-fg); border-left-color: #0082c9; }
 .day-event.local { background: var(--evt-local-bg); color: var(--evt-local-fg); border-left-color: #34a853; }
+/* 🆕 v26.1120.1 완료 체크한 일정 — 가운데 줄 + 흐리게 (세부 보기 체크박스로 지정) */
+.day-event.is-done { text-decoration: line-through; opacity: 0.55; }
 .day-event-more {
   font-size: calc(var(--base-fs) * 0.75);
   color: var(--text-muted);
@@ -775,6 +777,10 @@ body {
   padding: 12px;
 }
 .modal-bg.show { display: flex; }
+/* 🆕 v26.1120.1 일정 모달 카테고리 칸 + 관리 버튼 한 줄 */
+.ev-category-line { display: flex; gap: 6px; align-items: center; }
+.ev-category-line select { flex: 1; min-width: 0; }
+.ev-category-line .account-btn { flex-shrink: 0; }
 /* 🆕 v26.1119.1 창보다 모달이 길면 가운데 정렬 때문에 위쪽이 창 밖으로 잘려 타이틀바
    밑에 깔렸다. 창 높이 안에 넣고 넘치면 모달 안에서 스크롤.
    (설정 모달은 자체 max-height + 내부 스크롤이 있어 제외) */
@@ -1330,6 +1336,9 @@ body {
   text-overflow: ellipsis;
 }
 .pop-event-time { font-size: 10px; color: var(--surface-muted); }
+/* 🆕 v26.1120.1 완료 체크박스 + 완료 표시 */
+.pop-event-done { flex-shrink: 0; margin: 0; cursor: pointer; }
+.pop-event.is-done .pop-event-title { text-decoration: line-through; opacity: 0.55; }
 .pop-empty { text-align: center; color: var(--surface-muted); font-size: 11px; padding: 10px; }
 
 .toast {

@@ -123,6 +123,10 @@
       <button class="settings-tab" data-tab="calendar">
         <span class="settings-tab-icon">📅</span><span data-i18n="settings.tab.calendar">캘린더</span>
       </button>
+      <!-- 🆕 v26.1120.1 동기화 관련 옵션은 캘린더 탭에서 분리 -->
+      <button class="settings-tab" data-tab="sync">
+        <span class="settings-tab-icon">🔄</span><span data-i18n="settings.tab.sync">동기화 기간</span>
+      </button>
     </div>
 
     <div class="settings-modal-body">
@@ -237,29 +241,9 @@
            - "새 일정 기본 위치" 안내를 일반 탭에서 여기로 옮김 (★ 를 누르는 목록 바로 위)
            - 로컬 카테고리 / Google / NextCloud 캘린더 목록을 모달 없이 여기서 바로 표시
            - 연결된 계정의 버튼은 "동기화 설정" → "연결 해제" (목록이 여기 있으니 설정 모달 불필요) -->
+      <!-- 🆕 v26.1120.1 동기화 옵션은 "동기화 기간" 탭으로 옮기고, 로컬 카테고리 목록은 뺌
+           (카테고리 관리는 일정 모달의 카테고리 칸 옆 "관리" 버튼으로) -->
       <div class="settings-pane" data-pane="calendar">
-
-        <!-- ── 동기화 섹션 헤더 (클릭하면 즉시 동기화) ── -->
-        <!-- 🆕 v26.0925.1 제목 클릭(보이지 않는 동작) 대신 "지금 동기화" 버튼 -->
-        <div class="settings-heading-row">
-          <h4 data-i18n="settings.account.syncHeading">🔄 동기화</h4>
-          <button class="account-btn" id="syncNowBtn" data-i18n="settings.account.syncNowBtn" data-i18n-title="settings.account.syncNowTitle" title="연결된 계정 전부 지금 동기화 + 캘린더 목록 새로고침">지금 동기화</button>
-        </div>
-
-        <!-- 🆕 동기화 기간 / 범위 밖 캐시 보존 (값은 메인 프로세스 electron-store 'sync-range-settings') -->
-        <div class="settings-row">
-          <span data-i18n="settings.syncRange.past">과거 동기화 기간</span>
-          <select id="syncPastSelect" style="flex:0 0 auto; width:auto; min-width:120px"></select>
-        </div>
-        <div class="settings-row">
-          <span data-i18n="settings.syncRange.future">미래 동기화 기간</span>
-          <select id="syncFutureSelect" style="flex:0 0 auto; width:auto; min-width:120px"></select>
-        </div>
-        <div class="settings-row">
-          <span data-i18n="settings.syncRange.cache">범위 밖 캐시 보존</span>
-          <select id="syncCacheSelect" style="flex:0 0 auto; width:auto; min-width:120px"></select>
-        </div>
-        <p class="settings-hint" data-i18n="settings.syncRange.hint">설정 범위 밖 일정은 읽기 전용으로 이 기기에만 보관되며, 마지막으로 본 지 지정한 일수가 지나면 이 기기에서만 지워집니다. 서버(Google·NextCloud) 일정은 지워지지 않습니다.</p>
 
         <!-- 🆕 v26.5.9f 새 일정 기본 저장 위치 (3개 source 통합) — ☆→★ 로 지정
              🆕 v26.0925.1 ⭐/★ 두 별의 뜻을 여기서 같이 설명 (구 캘린더 선택 모달의 범례 복원) -->
@@ -274,20 +258,6 @@
             <span class="account-email" id="defaultTargetLabel">(미설정 — Google 우선)</span>
           </div>
         </div>
-
-        <div class="settings-divider"></div>
-
-        <!-- ── 로컬 달력 카테고리 (이름 편집/추가/삭제는 "관리" 모달에서) ── -->
-        <div class="settings-row settings-account">
-          <div class="account-info">
-            <span class="account-name" data-i18n="settings.account.localLabel">🏷 달력 카테고리 (로컬)</span>
-            <span class="account-email" id="acctCatSummary">0개</span>
-          </div>
-          <div class="account-controls">
-            <button class="account-btn" id="acctCatManageBtn" data-i18n="settings.category.manageBtn">관리</button>
-          </div>
-        </div>
-        <div class="acct-cal-list" id="acctCatList"></div>
 
         <div class="settings-divider"></div>
 
@@ -322,6 +292,33 @@
         <div class="acct-cal-list" id="acctNcList"></div>
 
       </div><!-- /pane calendar -->
+
+      <!-- ══════════════════ 동기화 기간 (지금 동기화 / 과거·미래 기간 / 캐시 보존) ══════════════════ -->
+      <div class="settings-pane" data-pane="sync">
+
+        <!-- ── 동기화 섹션 헤더 (클릭하면 즉시 동기화) ── -->
+        <!-- 🆕 v26.0925.1 제목 클릭(보이지 않는 동작) 대신 "지금 동기화" 버튼 -->
+        <div class="settings-heading-row">
+          <h4 data-i18n="settings.account.syncHeading">🔄 동기화</h4>
+          <button class="account-btn" id="syncNowBtn" data-i18n="settings.account.syncNowBtn" data-i18n-title="settings.account.syncNowTitle" title="연결된 계정 전부 지금 동기화 + 캘린더 목록 새로고침">지금 동기화</button>
+        </div>
+
+        <!-- 🆕 동기화 기간 / 범위 밖 캐시 보존 (값은 메인 프로세스 electron-store 'sync-range-settings') -->
+        <div class="settings-row">
+          <span data-i18n="settings.syncRange.past">과거 동기화 기간</span>
+          <select id="syncPastSelect" style="flex:0 0 auto; width:auto; min-width:120px"></select>
+        </div>
+        <div class="settings-row">
+          <span data-i18n="settings.syncRange.future">미래 동기화 기간</span>
+          <select id="syncFutureSelect" style="flex:0 0 auto; width:auto; min-width:120px"></select>
+        </div>
+        <div class="settings-row">
+          <span data-i18n="settings.syncRange.cache">범위 밖 캐시 보존</span>
+          <select id="syncCacheSelect" style="flex:0 0 auto; width:auto; min-width:120px"></select>
+        </div>
+        <p class="settings-hint" data-i18n="settings.syncRange.hint">설정 범위 밖 일정은 읽기 전용으로 이 기기에만 보관되며, 마지막으로 본 지 지정한 일수가 지나면 이 기기에서만 지워집니다. 서버(Google·NextCloud) 일정은 지워지지 않습니다.</p>
+
+      </div><!-- /pane sync -->
 
      </div><!-- /settings-panes -->
 
@@ -435,7 +432,11 @@
          저장 위치를 원격으로 바꿀 때 그 캘린더가 자동 선택됨 (= 카테고리 유지). -->
     <div id="evCategoryRow" style="display:none">
       <label data-i18n="label.category">카테고리</label>
-      <select id="evCategory"></select>
+      <!-- 🆕 v26.1120.1 설정 화면에서 카테고리 목록을 뺐으므로 관리 입구를 여기로 -->
+      <div class="ev-category-line">
+        <select id="evCategory"></select>
+        <button type="button" class="account-btn" id="evCategoryManageBtn" data-i18n="settings.category.manageBtn">관리</button>
+      </div>
       <div id="evCategoryHint" class="rec-hint"></div>
     </div>
 

@@ -59,6 +59,7 @@ window.LOCALES = {
     // 🆕 v26.0925.1 탭 4개(일반/스킨/카테고리/계정연동) → 2개(일반/캘린더)
     'settings.tab.general': '일반',
     'settings.tab.calendar': '캘린더',
+    'settings.tab.sync': '동기화 기간',
 
     'settings.general.language': '🌐 언어',
     'settings.general.windowBehavior': '🪟 창 동작',
@@ -125,7 +126,6 @@ window.LOCALES = {
       '아래 목록에서 별을 눌러 지정하세요.<br>' +
       '<span class="hint-star">★ 주황 별</span> = 새 일정을 추가할 때 <b>자동으로 선택되는 저장 위치</b> (로컬·Google·NextCloud 통틀어 1곳)<br>' +
       '<span class="hint-star-primary">⭐ 노란 별</span> = 그 계정 안에서의 <b>대표 캘린더</b> (일정 모달에서 저장 위치를 그 계정으로 바꿀 때 기본 선택)',
-    'settings.account.localLabel': '🏷 달력 카테고리 (로컬)',
     'acct.loading': '캘린더 목록을 불러오는 중…',
     'acct.connectFirst': '연결하면 캘린더 목록이 여기에 표시됩니다.',
     'acct.pickCalendars': '동기화할 캘린더를 체크하세요.',
@@ -239,6 +239,7 @@ window.LOCALES = {
     // ── 팝오버 ──
     'popover.empty': '일정이 없습니다',
     'popover.allDay': '종일',
+    'popover.doneTitle': '완료 표시 (이 기기에만 저장)',
     'popover.dateFormat': '{month}월 {day}일 ({dow})',
     'day.moreShort': '+{n}',
     'day.moreLong': '+{n}개 더',
@@ -387,6 +388,7 @@ window.LOCALES = {
     'settings.close': 'Close',
     'settings.tab.general': 'General',
     'settings.tab.calendar': 'Calendars',
+    'settings.tab.sync': 'Sync range',
 
     'settings.general.language': '🌐 Language',
     'settings.general.windowBehavior': '🪟 Window behavior',
@@ -451,7 +453,6 @@ window.LOCALES = {
       'Click a star in the lists below to set it.<br>' +
       '<span class="hint-star">★ Orange star</span> = the <b>save location picked automatically</b> for new events (one place across local/Google/NextCloud)<br>' +
       '<span class="hint-star-primary">⭐ Yellow star</span> = the <b>primary calendar</b> within that account (preselected when you switch an event\'s location to that account)',
-    'settings.account.localLabel': '🏷 Calendar categories (local)',
     'acct.loading': 'Loading calendars…',
     'acct.connectFirst': 'Connect to see your calendars here.',
     'acct.pickCalendars': 'Check the calendars you want to sync.',
@@ -559,6 +560,7 @@ window.LOCALES = {
 
     'popover.empty': 'No events',
     'popover.allDay': 'All day',
+    'popover.doneTitle': 'Mark as done (saved on this device only)',
     'popover.dateFormat': '{month}/{day} ({dow})',
     'day.moreShort': '+{n}',
     'day.moreLong': '+{n} more',
